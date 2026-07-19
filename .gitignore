@@ -1,32 +1,15 @@
+# macOS
+.DS_Store
 
+# IDE
+.vscode/
 
-# Block all local .terraform working directories (plugins, modules, etc.) recursively
-**/.terraform/
+# Python
+__pycache__/
+*.pyc
 
-# Block state files (which often contain sensitive/plain-text secrets)
-**/*.tfstate
-**/*.tfstate.*
+# Environment
+.env
 
-# Block crash logs
-**/crash.log
-**/crash.*.log
-
-# Block local variable files (often containing secrets)
-#**/*.tfvars
-#**/*.tfvars.json
-
-# Block override files
-override.tf
-override.tf.json
-**/*_override.tf
-**/*_override.tf.json
-
-# Allow .terraform.lock.hcl (highly recommended to commit this to lock provider versions)
-!**/.terraform.lock.hcl
-
-# Ignore CLI configuration files
-**/.terraformrc
-**/terraform.rc
-
-# Ignore terraform plan output files
-**/*.tfplan
+# Logs
+*.log
