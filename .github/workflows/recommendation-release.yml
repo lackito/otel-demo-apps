@@ -1,0 +1,89 @@
+name: Release recommendation service
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - apps/recommendation/**
+      - .github/workflows/recommendation-release.yml
+  workflow_dispatch:
+
+concurrency:
+  group: recommendation-release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: recommendation
+  GITOPS_REPOSITORY: lackito/ot-demo-gitops
+  GITOPS_VALUES_FILE: applications/otel-demo/values.yaml
+
+jobs:
+  release:
+    name: Build, publish, and promote
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out application source
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          image_tag="${GITHUB_SHA}"
+          image_uri="${REGISTRY}/${ECR_REPOSITORY}:${image_tag}"
+          docker build --tag "${image_uri}" apps/recommendation
+          docker push "${image_uri}"
+          echo "tag=${image_tag}" >> "$GITHUB_OUTPUT"
+          echo "uri=${image_uri}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out GitOps configuration
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.GITOPS_REPOSITORY }}
+          token: ${{ secrets.GITOPS_REPOSITORY_TOKEN }}
+          path: gitops
+          persist-credentials: false
+
+      - name: Update desired image version
+        working-directory: gitops
+        env:
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          sed -i "s|^      tag: .*|      tag: ${IMAGE_TAG}|" "${GITOPS_VALUES_FILE}"
+          git diff --check
+          git diff -- "${GITOPS_VALUES_FILE}"
+
+      - name: Commit and push GitOps change
+        working-directory: gitops
+        env:
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          GITOPS_TOKEN: ${{ secrets.GITOPS_REPOSITORY_TOKEN }}
+        run: |
+          if git diff --quiet -- "${GITOPS_VALUES_FILE}"; then
+            echo "GitOps repository already references ${IMAGE_TAG}."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${GITOPS_VALUES_FILE}"
+          git commit -m "chore(recommendation): deploy ${IMAGE_TAG}"
+          git remote set-url origin "https://x-access-token:${GITOPS_TOKEN}@github.com/${GITOPS_REPOSITORY}.git"
+          git push origin HEAD:main

@@ -1,0 +1,72 @@
+# ===================================================================
+# Java & Build Output
+# ===================================================================
+*.class
+*.log
+*.ctxt
+
+# Executable location
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Virtual Machine crash logs
+hs_err_pid*
+replay_pid*
+
+# ===================================================================
+# Gradle Build Directories & Files
+# ===================================================================
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Avoid committing local properties (e.g., local SDK/JDK paths)
+local.properties
+
+# Cache & Daemon status files
+.gradletasknamecache
+
+# ===================================================================
+# IDE Specific Files
+# ===================================================================
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+bin/
+.springBeans
+
+# VS Code
+.vscode/
+.history/
+
+# ===================================================================
+# OS & Environment Files
+# ===================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Secrets / Local Configs
+.env
+.env.local
