@@ -36,3 +36,5 @@ permissions for the `recommendation` repository plus `ecr:GetAuthorizationToken`
 
 The release workflow intentionally updates the GitOps repository rather than
 deploying to Kubernetes directly. Argo CD remains the sole owner of workloads.
+
+CI/CD test
