@@ -20,7 +20,7 @@ permissions:
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: recommendation
-  GITOPS_REPOSITORY: lackito/ot-demo-gitops
+  GITOPS_REPOSITORY: lackito/otel-demo-gitops
   GITOPS_VALUES_FILE: applications/otel-demo/values.yaml
 
 jobs:
