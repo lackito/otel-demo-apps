@@ -44,10 +44,13 @@ Add `LOCAL_REPOSITORY_TOKEN` to the `otel-demo-apps` repository secrets. It
 must be a fine-grained token with **Contents: Read and write** access only to
 `lackito/otel-demo-local`.
 
+Add `GHCR_PAT` as a second repository secret. It must be a personal access
+token (classic) owned by `lackito` with `write:packages` scope. It is used only
+to publish the local image to GHCR.
+
 The local GHCR package must be public so kind can pull it without registry
-credentials. Under the package's **Manage Actions access** settings,
-`otel-demo-apps` must have write access. The local workflow does not use AWS
-credentials, ECR, or `otel-demo-gitops`.
+credentials. The local workflow does not use AWS credentials, ECR, or
+`otel-demo-gitops`.
 
 ## AWS Recommendation CI/CD
 
