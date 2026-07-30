@@ -12,7 +12,44 @@ apps/
 .github/workflows/
 ```
 
-## Recommendation CI/CD
+## Environment boundary
+
+This repository contains reusable application source and two
+environment-specific release workflows.
+
+| Application branch | Release target |
+| --- | --- |
+| `local` | GHCR, `otel-demo-local`, and the local kind cluster |
+| `main` | Amazon ECR, `otel-demo-gitops`, and Amazon EKS |
+
+For local experimentation, commit changes on a local development branch so
+the image receives a new commit-based tag. The branch does not need to be
+pushed for direct kind loading. Pushing Recommendation changes to the `local`
+branch invokes local CI. Merging those validated changes into `main` invokes
+the AWS release workflow.
+
+## Local Recommendation CI/CD
+
+`.github/workflows/recommendation-local-release.yml` runs when Recommendation
+code is pushed to the `local` branch. It:
+
+1. uses the triggering commit SHA as the immutable image tag;
+2. builds `apps/recommendation` for `linux/arm64`;
+3. publishes the image to
+   `ghcr.io/lackito/otel-demo-local-recommendation`;
+4. updates `gitops/otel-demo/values.yaml` in `otel-demo-local`;
+5. lets local Argo CD deploy the generated desired-state commit to kind.
+
+Add `LOCAL_REPOSITORY_TOKEN` to the `otel-demo-apps` repository secrets. It
+must be a fine-grained token with **Contents: Read and write** access only to
+`lackito/otel-demo-local`.
+
+The local GHCR package must be public so kind can pull it without registry
+credentials. Under the package's **Manage Actions access** settings,
+`otel-demo-apps` must have write access. The local workflow does not use AWS
+credentials, ECR, or `otel-demo-gitops`.
+
+## AWS Recommendation CI/CD
 
 `.github/workflows/recommendation-release.yml` runs for changes to the
 recommendation service merged to `main` (or when manually dispatched). It:
