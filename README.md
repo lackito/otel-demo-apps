@@ -69,10 +69,12 @@ secret. Add this repository secret to `otel-demo-apps`:
 | `GITOPS_REPOSITORY_TOKEN` | Fine-grained GitHub token with **Contents: Read and write** access to `lackito/otel-demo-gitops`. |
 
 The IAM role trust policy must restrict the GitHub OIDC subject to
-`repo:lackito/otel-demo-apps:ref:refs/heads/main`. The role needs only ECR push
-permissions for the `recommendation` repository plus `ecr:GetAuthorizationToken`.
-The workflow validates and displays its non-sensitive OIDC audience and subject
-before attempting to assume the role.
+`repo:lackito@6595109/otel-demo-apps@1305341394:ref:refs/heads/main`. This
+repository uses GitHub's customized OIDC subject format with immutable owner and
+repository IDs. The role needs only ECR push permissions for the
+`recommendation` repository plus `ecr:GetAuthorizationToken`. The workflow
+validates and displays its non-sensitive OIDC audience and subject before
+attempting to assume the role.
 
 The release workflow intentionally updates the GitOps repository rather than
 deploying to Kubernetes directly. Argo CD remains the sole owner of workloads.

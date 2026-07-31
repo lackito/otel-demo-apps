@@ -20,6 +20,7 @@ permissions:
 env:
   AWS_REGION: us-east-1
   AWS_ROLE_TO_ASSUME: arn:aws:iam::650032249451:role/otel-demo-dev-recommendation-github-actions
+  AWS_OIDC_SUBJECT: repo:lackito@6595109/otel-demo-apps@1305341394:ref:refs/heads/main
   ECR_REPOSITORY: recommendation
   GITOPS_REPOSITORY: lackito/otel-demo-gitops
   GITOPS_VALUES_FILE: applications/otel-demo/values.yaml
@@ -41,8 +42,7 @@ jobs:
             const claims = JSON.parse(
               Buffer.from(token.split('.')[1], 'base64url').toString('utf8')
             );
-            const expectedSubject =
-              `repo:${process.env.GITHUB_REPOSITORY}:ref:${process.env.GITHUB_REF}`;
+            const expectedSubject = process.env.AWS_OIDC_SUBJECT;
             const validAudience = Array.isArray(claims.aud)
               ? claims.aud.includes('sts.amazonaws.com')
               : claims.aud === 'sts.amazonaws.com';
