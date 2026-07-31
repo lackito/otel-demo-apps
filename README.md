@@ -52,6 +52,35 @@ The local GHCR package must be public so kind can pull it without registry
 credentials. The local workflow does not use AWS credentials, ECR, or
 `otel-demo-gitops`.
 
+### Validate a local release
+
+After pushing Recommendation code to the `local` branch, validate every CI
+handoff instead of relying only on the final application response.
+
+1. Open **otel-demo-apps → Actions → Release recommendation service to
+   local Kubernetes** and select the run for the pushed commit.
+2. Confirm the run shows `local` as its branch and the expected commit SHA.
+3. Inspect these successful log steps:
+   - **Build and publish arm64 image** pushed
+     `ghcr.io/lackito/otel-demo-local-recommendation:<commit-sha>`;
+   - **Verify anonymous image access** confirmed kind can pull it;
+   - **Update local desired image** changed only the Recommendation repository
+     and tag;
+   - **Commit and push local desired state** created the generated GitOps
+     commit in `otel-demo-local`.
+4. Open the GHCR package and confirm that the full application commit SHA is
+   present as an image tag.
+
+Record the triggering application SHA locally with:
+
+```bash
+git switch local
+git rev-parse HEAD
+```
+
+The same SHA should appear in the workflow logs, GHCR image tag, generated
+`otel-demo-local` values commit, and running Kubernetes Deployment.
+
 ## AWS Recommendation CI/CD
 
 `.github/workflows/recommendation-release.yml` runs for changes to the
