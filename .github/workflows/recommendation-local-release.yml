@@ -25,7 +25,7 @@ env:
 
 jobs:
   release:
-    name: Build, publish, and update local desired state
+    name: Build, publish, and update local desired state (${{ github.sha }})
     if: github.ref == 'refs/heads/local'
     runs-on: ubuntu-latest
 
