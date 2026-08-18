@@ -1,2 +1,1 @@
-Initiate cloud run #3
-Initiate local run #6
+Initiate local run #7
