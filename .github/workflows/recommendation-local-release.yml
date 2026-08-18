@@ -19,9 +19,9 @@ permissions:
 
 env:
   IMAGE_NAME: otel-demo-local-recommendation
-  LOCAL_REPOSITORY: lackito/otel-demo-local
+  LOCAL_GITOPS_REPOSITORY: lackito/otel-demo-gitops-local
   REGISTRY: ghcr.io
-  VALUES_FILE: gitops/otel-demo/values.yaml
+  VALUES_FILE: applications/otel-demo/values.yaml
 
 jobs:
   release:
@@ -45,18 +45,18 @@ jobs:
             echo "uri=${image_repository}:${source_revision}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Check out local platform repository
+      - name: Check out local GitOps configuration
         uses: actions/checkout@v6
         with:
-          repository: ${{ env.LOCAL_REPOSITORY }}
+          repository: ${{ env.LOCAL_GITOPS_REPOSITORY }}
           ref: main
-          token: ${{ secrets.LOCAL_REPOSITORY_TOKEN }}
-          path: local-platform
+          token: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
+          path: local-gitops
 
       - name: Test the local values updater
         run: >-
           python3 -m unittest discover
-          -s local-platform/.github/scripts
+          -s .github/scripts
           -p 'test_*.py'
 
       - name: Log in to GitHub Container Registry
@@ -124,15 +124,15 @@ jobs:
           IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
-          python3 local-platform/.github/scripts/update_recommendation_values.py \
-            --file "local-platform/${VALUES_FILE}" \
+          python3 .github/scripts/update_recommendation_values.py \
+            --file "local-gitops/${VALUES_FILE}" \
             --repository "${IMAGE_REPOSITORY}" \
             --tag "${IMAGE_TAG}"
-          git -C local-platform diff --check
-          git -C local-platform diff -- "${VALUES_FILE}"
+          git -C local-gitops diff --check
+          git -C local-gitops diff -- "${VALUES_FILE}"
 
       - name: Commit and push local desired state
-        working-directory: local-platform
+        working-directory: local-gitops
         env:
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |

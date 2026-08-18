@@ -19,7 +19,7 @@ environment-specific release workflows.
 
 | Application branch | Release target |
 | --- | --- |
-| `local` | GHCR, `otel-demo-local`, and the local kind cluster |
+| `local` | GHCR, `otel-demo-gitops-local`, and the local kind cluster |
 | `main` | Amazon ECR, `otel-demo-gitops`, and Amazon EKS |
 
 For local experimentation, commit changes on a local development branch so
@@ -37,12 +37,12 @@ code is pushed to the `local` branch. It:
 2. builds `apps/recommendation` for `linux/arm64`;
 3. publishes the image to
    `ghcr.io/lackito/otel-demo-local-recommendation`;
-4. updates `gitops/otel-demo/values.yaml` in `otel-demo-local`;
+4. updates `applications/otel-demo/values.yaml` in `otel-demo-gitops-local`;
 5. lets local Argo CD deploy the generated desired-state commit to kind.
 
-Add `LOCAL_REPOSITORY_TOKEN` to the `otel-demo-apps` repository secrets. It
+Add `LOCAL_GITOPS_REPOSITORY_TOKEN` to the `otel-demo-apps` repository secrets. It
 must be a fine-grained token with **Contents: Read and write** access only to
-`lackito/otel-demo-local`.
+`lackito/otel-demo-gitops-local`.
 
 Add `GHCR_PAT` as a second repository secret. It must be a personal access
 token (classic) owned by `lackito` with `write:packages` scope. It is used only
@@ -67,7 +67,7 @@ handoff instead of relying only on the final application response.
    - **Update local desired image** changed only the Recommendation repository
      and tag;
    - **Commit and push local desired state** created the generated GitOps
-     commit in `otel-demo-local`.
+     commit in `otel-demo-gitops-local`.
 4. Open the GHCR package and confirm that the full application commit SHA is
    present as an image tag.
 
@@ -79,7 +79,7 @@ git rev-parse HEAD
 ```
 
 The same SHA should appear in the workflow logs, GHCR image tag, generated
-`otel-demo-local` values commit, and running Kubernetes Deployment.
+`otel-demo-gitops-local` values commit, and running Kubernetes Deployment.
 
 ## AWS Recommendation CI/CD
 
