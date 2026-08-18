@@ -6,6 +6,7 @@ on:
       - local
     paths:
       - apps/recommendation/**
+      - .github/workflows/recommendation-local-release.yml
   workflow_dispatch:
 
 concurrency:
@@ -18,9 +19,9 @@ permissions:
 
 env:
   IMAGE_NAME: otel-demo-local-recommendation
-  LOCAL_REPOSITORY: lackito/otel-demo-local
+  LOCAL_GITOPS_REPOSITORY: lackito/otel-demo-gitops-local
   REGISTRY: ghcr.io
-  VALUES_FILE: gitops/otel-demo/values.yaml
+  VALUES_FILE: applications/otel-demo/values.yaml
 
 jobs:
   release:
@@ -44,26 +45,38 @@ jobs:
             echo "uri=${image_repository}:${source_revision}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Check out local platform repository
+      - name: Verify local GitOps write access
+        env:
+          GH_TOKEN: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
+        shell: bash
+        run: |
+          if [[ "$(gh api "repos/${LOCAL_GITOPS_REPOSITORY}" --jq '.permissions.push')" != "true" ]]; then
+            echo "LOCAL_GITOPS_REPOSITORY_TOKEN cannot write to ${LOCAL_GITOPS_REPOSITORY}." >&2
+            echo "Grant the fine-grained token access to this repository with Contents: Read and write." >&2
+            exit 1
+          fi
+
+      - name: Check out local GitOps configuration
         uses: actions/checkout@v6
         with:
-          repository: ${{ env.LOCAL_REPOSITORY }}
+          repository: ${{ env.LOCAL_GITOPS_REPOSITORY }}
           ref: main
-          token: ${{ secrets.LOCAL_REPOSITORY_TOKEN }}
-          path: local-platform
+          token: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
+          path: local-gitops
+          persist-credentials: false
 
       - name: Test the local values updater
         run: >-
           python3 -m unittest discover
-          -s local-platform/.github/scripts
+          -s .github/scripts
           -p 'test_*.py'
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -123,16 +136,17 @@ jobs:
           IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
-          python3 local-platform/.github/scripts/update_recommendation_values.py \
-            --file "local-platform/${VALUES_FILE}" \
+          python3 .github/scripts/update_recommendation_values.py \
+            --file "local-gitops/${VALUES_FILE}" \
             --repository "${IMAGE_REPOSITORY}" \
             --tag "${IMAGE_TAG}"
-          git -C local-platform diff --check
-          git -C local-platform diff -- "${VALUES_FILE}"
+          git -C local-gitops diff --check
+          git -C local-gitops diff -- "${VALUES_FILE}"
 
       - name: Commit and push local desired state
-        working-directory: local-platform
+        working-directory: local-gitops
         env:
+          GITOPS_TOKEN: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
           if git diff --quiet -- "${VALUES_FILE}"; then
@@ -143,4 +157,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "${VALUES_FILE}"
           git commit -m "chore(recommendation): deploy ${IMAGE_TAG}"
+          git remote set-url origin "https://x-access-token:${GITOPS_TOKEN}@github.com/${LOCAL_GITOPS_REPOSITORY}.git"
           git push origin HEAD:main

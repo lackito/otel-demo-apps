@@ -19,9 +19,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Run updater tests
-        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
-
       - name: Parse YAML
         shell: bash
         run: |
