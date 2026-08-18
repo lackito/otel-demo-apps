@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - local
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repository:
+    name: Repository checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Run updater tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
+      - name: Parse YAML
+        shell: bash
+        run: |
+          ruby <<'RUBY'
+          require "yaml"
+          paths = Dir.glob("**/*.{yaml,yml}", File::FNM_DOTMATCH).reject do |path|
+            path.split("/").include?(".git")
+          end
+          paths.each { |path| YAML.parse_file(path) }
+          puts "Parsed #{paths.length} YAML files."
+          RUBY
+
+      - name: Lint GitHub Actions workflows
+        run: docker run --rm -v "${PWD}:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color

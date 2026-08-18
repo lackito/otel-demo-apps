@@ -5,6 +5,10 @@ Application source code for the OpenTelemetry Demo platform.
 
 This repository contains the application services, CI pipelines, Dockerfiles, and supporting artifacts used by the platform.
 
+See the
+[AWS and local project walkthrough](https://github.com/lackito/otel-demo-local/blob/main/docs/PROJECT_WALKTHROUGH.md)
+for the shared source-to-Argo CD delivery model.
+
 ## Repository Structure
 
 ```
