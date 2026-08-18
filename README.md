@@ -98,16 +98,21 @@ recommendation service merged to `main` (or when manually dispatched). It:
 3. updates the recommendation tag in `otel-demo-gitops`; and
 4. lets the existing Argo CD application synchronize the resulting desired state.
 
-Before enabling the workflow, add these repository secrets to `otel-demo-apps`:
+The non-sensitive IAM role ARN is configured directly in the AWS-specific
+workflow so the job cannot silently target a stale role from a repository
+secret. Add this repository secret to `otel-demo-apps`:
 
 | Secret | Purpose |
 | --- | --- |
-| `AWS_ROLE_TO_ASSUME` | ARN of the IAM role trusted by GitHub Actions OIDC and permitted to push to the `recommendation` ECR repository. |
 | `GITOPS_REPOSITORY_TOKEN` | Fine-grained GitHub token with **Contents: Read and write** access to `lackito/otel-demo-gitops`. |
 
 The IAM role trust policy must restrict the GitHub OIDC subject to
-`repo:lackito/otel-demo-apps:ref:refs/heads/main`. The role needs only ECR push
-permissions for the `recommendation` repository plus `ecr:GetAuthorizationToken`.
+`repo:lackito@6595109/otel-demo-apps@1305341394:ref:refs/heads/main`. This
+repository uses GitHub's customized OIDC subject format with immutable owner and
+repository IDs. The role needs only ECR push permissions for the
+`recommendation` repository plus `ecr:GetAuthorizationToken`. The workflow
+validates and displays its non-sensitive OIDC audience and subject before
+attempting to assume the role.
 
 The release workflow intentionally updates the GitOps repository rather than
 deploying to Kubernetes directly. Argo CD remains the sole owner of workloads.

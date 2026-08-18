@@ -19,6 +19,8 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
+  AWS_ROLE_TO_ASSUME: arn:aws:iam::650032249451:role/otel-demo-dev-recommendation-github-actions
+  AWS_OIDC_SUBJECT: repo:lackito@6595109/otel-demo-apps@1305341394:ref:refs/heads/main
   ECR_REPOSITORY: recommendation
   GITOPS_REPOSITORY: lackito/otel-demo-gitops
   GITOPS_VALUES_FILE: applications/otel-demo/values.yaml
@@ -30,13 +32,36 @@ jobs:
 
     steps:
       - name: Check out application source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Verify GitHub OIDC claims
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken('sts.amazonaws.com');
+            const claims = JSON.parse(
+              Buffer.from(token.split('.')[1], 'base64url').toString('utf8')
+            );
+            const expectedSubject = process.env.AWS_OIDC_SUBJECT;
+            const validAudience = Array.isArray(claims.aud)
+              ? claims.aud.includes('sts.amazonaws.com')
+              : claims.aud === 'sts.amazonaws.com';
+
+            core.info(`OIDC audience: ${JSON.stringify(claims.aud)}`);
+            core.info(`OIDC subject: ${claims.sub}`);
+            core.info(`Expected subject: ${expectedSubject}`);
+
+            if (!validAudience || claims.sub !== expectedSubject) {
+              core.setFailed('GitHub OIDC claims do not match the AWS IAM trust policy.');
+            }
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: recommendation-release-${{ github.run_id }}
 
       - name: Log in to Amazon ECR
         id: ecr-login
@@ -55,7 +80,7 @@ jobs:
           echo "uri=${image_uri}" >> "$GITHUB_OUTPUT"
 
       - name: Check out GitOps configuration
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.GITOPS_REPOSITORY }}
           token: ${{ secrets.GITOPS_REPOSITORY_TOKEN }}
