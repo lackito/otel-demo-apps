@@ -40,9 +40,11 @@ code is pushed to the `local` branch. It:
 4. updates `applications/otel-demo/values.yaml` in `otel-demo-gitops-local`;
 5. lets local Argo CD deploy the generated desired-state commit to kind.
 
-Add `LOCAL_GITOPS_REPOSITORY_TOKEN` to the `otel-demo-apps` repository secrets. It
-must be a fine-grained token with **Contents: Read and write** access only to
-`lackito/otel-demo-gitops-local`.
+Add `LOCAL_GITOPS_REPOSITORY_TOKEN` to the `otel-demo-apps` repository secrets.
+It must be a fine-grained token with **Contents: Read and write** access to
+`lackito/otel-demo-gitops-local`. If the token predates the GitOps repository,
+edit its repository access and explicitly add `otel-demo-gitops-local` before
+running the workflow.
 
 Add `GHCR_PAT` as a second repository secret. It must be a personal access
 token (classic) owned by `lackito` with `write:packages` scope. It is used only
