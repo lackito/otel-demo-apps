@@ -116,5 +116,3 @@ attempting to assume the role.
 
 The release workflow intentionally updates the GitOps repository rather than
 deploying to Kubernetes directly. Argo CD remains the sole owner of workloads.
-
-CI/CD test
