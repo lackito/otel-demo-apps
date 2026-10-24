@@ -11,7 +11,17 @@ p = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(p)
 
 class PromotionTests(unittest.TestCase):
-    def test_push_race_preserves_both_promotions(self):
+    def test_aws_push_race_preserves_both_promotions(self):
+        self.check_push_race('aws')
+
+    def test_local_push_race_preserves_both_promotions(self):
+        self.check_push_race('local')
+
+    def check_push_race(self, target):
+        def repository(service):
+            if target == 'local':
+                return 'ghcr.io/lackito/otel-demo-local-' + service
+            return '123456789012.dkr.ecr.us-east-1.amazonaws.com/' + service
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
             remote = root / 'remote.git'
@@ -30,10 +40,10 @@ class PromotionTests(unittest.TestCase):
                 nonlocal raced
                 if Path(cwd) == first and args[0] == 'push' and not raced:
                     raced = True
-                    p.promote(second, file, 'ad', '123456789012.dkr.ecr.us-east-1.amazonaws.com/ad', 'a'*40)
+                    p.promote(second, file, 'ad', repository('ad'), 'a'*40, target=target)
                 return real_git(cwd, *args, **kwargs)
             with patch.object(p, 'git', racing_git), patch.object(p.time, 'sleep'):
-                p.promote(first, file, 'product-catalog', '123456789012.dkr.ecr.us-east-1.amazonaws.com/product-catalog', 'b'*40)
+                p.promote(first, file, 'product-catalog', repository('product-catalog'), 'b'*40, target=target)
             self.assertTrue(raced)
             result = YAML().load((first/file).read_text())['components']
             self.assertEqual(result['ad']['imageOverride']['tag'], 'a'*40)
@@ -41,10 +51,34 @@ class PromotionTests(unittest.TestCase):
             self.assertEqual(result['recommendation']['imageOverride']['tag'], 'old')
             self.assertTrue(result['recommendation']['enabled'])
             self.assertEqual(result['ad']['env'], [])
+            if target == 'local':
+                self.assertEqual(result['ad']['imageOverride']['pullPolicy'], 'IfNotPresent')
+                self.assertEqual(result['product-catalog']['imageOverride']['pullPolicy'], 'IfNotPresent')
             self.assertIn('# keep comment', (first/file).read_text())
             head = p.git(first, 'rev-parse', 'HEAD').stdout
-            p.promote(first, file, 'product-catalog', '123456789012.dkr.ecr.us-east-1.amazonaws.com/product-catalog', 'b'*40)
+            p.promote(first, file, 'product-catalog', repository('product-catalog'), 'b'*40, target=target)
             self.assertEqual(head, p.git(first, 'rev-parse', 'HEAD').stdout)
+
+    def test_local_recommendation_and_pull_policy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'values.yaml'
+            path.write_text('components:\n  recommendation:\n    env: []\n    imageOverride:\n      pullPolicy: Never\n  ad:\n    enabled: true\n')
+            p.update(path, 'recommendation', 'ghcr.io/lackito/otel-demo-local-recommendation', 'c'*40, target='local')
+            components = YAML().load(path.read_text())['components']
+            self.assertEqual(components['recommendation']['imageOverride']['pullPolicy'], 'IfNotPresent')
+            self.assertEqual(components['recommendation']['imageOverride']['tag'], 'c'*40)
+            self.assertEqual(components['recommendation']['env'], [])
+            self.assertTrue(components['ad']['enabled'])
+
+    def test_target_and_component_registry_boundaries(self):
+        for target, repository in [
+            ('aws', 'ghcr.io/lackito/otel-demo-local-ad'),
+            ('local', '123456789012.dkr.ecr.us-east-1.amazonaws.com/ad'),
+            ('local', 'ghcr.io/lackito/otel-demo-local-product-catalog'),
+            ('local', 'ghcr.io/lackito/other-ad'),
+        ]:
+            with self.subTest(target=target, repository=repository), self.assertRaises(ValueError):
+                p.update(Path('/unused'), 'ad', repository, 'a'*40, target=target)
 
     def test_rejects_invalid_inputs(self):
         with self.assertRaises(ValueError):

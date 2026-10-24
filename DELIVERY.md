@@ -3,7 +3,8 @@
 Product Catalog and Ad now have build and AWS release paths alongside
 Recommendation. This implements delivery; it is not evidence of an ECR publish
 or an EKS rollout. The upstream chart remains pinned at 0.38.4. No PostgreSQL
-is required. The local/GHCR Recommendation workflow is unchanged.
+is required. Local GHCR delivery is described below; Recommendation retains its build and
+anonymous-access checks and now shares the concurrent-safe promotion updater.
 
 ## Build and validate
 
@@ -136,3 +137,59 @@ Before opening a main-targeted PR, prepare a clean branch from refreshed
 origin/main and deliberately include or omit those existing local-only checks.
 Do not blindly merge the full local history. No PR or remote push was made
 as part of this local commit preparation.
+
+
+## Local GHCR delivery for kind
+
+The local release workflows for Recommendation, Product Catalog, and Ad run
+on path-filtered pushes to `local`, or manual dispatch selecting `local`.
+The implementation branch itself does not trigger publication. Review and
+integrate the local-delivery changes into `local` before pushing that branch;
+that push is a release action. Do not merge into main to test local delivery.
+
+Catalog and Ad use native `ubuntu-24.04-arm` runners, Python 3.12, and
+repository-root Docker builds. They smoke-test at chart memory limits before
+publishing, then pull with an empty Docker credential directory and repeat
+the smoke tests before promotion. The workflow summary records the published
+digest. These workflows have been linted locally but have not run on GitHub.
+CI checks both native ARM64 and AMD64; remote results remain pending.
+
+Required existing secrets in otel-demo-apps:
+- `GHCR_PAT`: the repository owner's classic PAT with write:packages.
+- `LOCAL_GITOPS_REPOSITORY_TOKEN`: contents read/write for otel-demo-gitops-local,
+  including permission to push its main branch under applicable branch rules.
+
+New packages must be public for anonymous cluster pulls:
+`ghcr.io/lackito/otel-demo-local-product-catalog` and
+`ghcr.io/lackito/otel-demo-local-ad`. A first run may publish successfully but
+stop at the anonymous pull if package visibility is private. Make that package
+public, then rerun. No GitOps activation occurs until all verification passes.
+
+Images use the full source commit SHA as tag. GHCR tags are not intrinsically
+immutable; avoid overwriting released tags and retain digest evidence.
+Recommendation, Ad, and Catalog all use scripts/promote.py with --target local.
+Each edit changes only its own image repository/tag/pullPolicy, preserves other
+configuration, sets IfNotPresent, and retries ordinary pushes against latest
+main. The default --target aws still validates ECR repositories separately.
+
+### Transition from the temporary kind overrides
+
+1. Complete both new local release workflows and inspect their GitOps commits.
+   Confirm real full-SHA GHCR references and IfNotPresent in GitOps main.
+2. Inspect the live Application's Helm parameters. Temporary repository/tag/
+   Never parameters take precedence over Git values, so published images will
+   not become active until those parameters are removed.
+3. Remove only the six Catalog/Ad imageOverride parameters, preserving any
+   unrelated overrides. Do this only after both published images are verified.
+4. Refresh Argo CD and run application-validate from otel-demo-local. Inspect
+   all three Deployment image references and pod image IDs. Browse products
+   and ads and verify new traces in Jaeger; check restarts and memory usage.
+5. For later releases, source changes on local publish and promote without
+   kind load or manual image overrides. A recreated cluster pulls public GHCR
+   images normally.
+
+No new GHCR publication, remote GitOps commit, or live override removal was
+performed while preparing these workflows. Active desired state is unchanged.
+Rollback uses a previous verified service SHA in local GitOps, followed by
+Argo CD reconciliation. For a first custom release, remove only that service's
+imageOverride to restore the pinned chart default.

@@ -8,19 +8,26 @@ from pathlib import Path
 from ruamel.yaml import YAML
 
 
-def update(path, component, repository, tag):
+def update(path, component, repository, tag, target="aws"):
     if component not in {'recommendation', 'product-catalog', 'ad'}:
         raise ValueError('unsupported component')
     if not re.fullmatch(r'[0-9a-f]{40}', tag):
         raise ValueError('tag must be a full Git SHA')
-    if not re.fullmatch(r'\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/' + re.escape(component), repository):
-        raise ValueError('repository must be the component ECR repository')
+    patterns = {
+        'aws': r'\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/' + re.escape(component),
+        'local': r'ghcr\.io/[a-z0-9][a-z0-9-]*/otel-demo-local-' + re.escape(component),
+    }
+    if target not in patterns or not re.fullmatch(patterns[target], repository):
+        raise ValueError('repository must match the target registry and component')
     yaml = YAML()
     yaml.preserve_quotes = True
     yaml.indent(mapping=2, sequence=4, offset=2)
     data = yaml.load(path.read_text())
     service = data.setdefault('components', {}).setdefault(component, {})
-    service['imageOverride'] = {'repository': repository, 'tag': tag}
+    override = service.setdefault('imageOverride', {})
+    override.update(repository=repository, tag=tag)
+    if target == 'local':
+        override['pullPolicy'] = 'IfNotPresent'
     with path.open('w') as output:
         yaml.dump(data, output)
 
@@ -29,7 +36,7 @@ def git(cwd, *args, check=True):
     return subprocess.run(['git', '-C', str(cwd), *args], check=check, text=True, capture_output=True)
 
 
-def promote(checkout, file, component, repository, tag, attempts=8):
+def promote(checkout, file, component, repository, tag, attempts=8, target="aws"):
     checkout = Path(checkout).resolve()
     path = (checkout / file).resolve()
     if not path.is_relative_to(checkout):
@@ -39,7 +46,7 @@ def promote(checkout, file, component, repository, tag, attempts=8):
     for attempt in range(attempts):
         git(checkout, 'fetch', 'origin', 'main')
         git(checkout, 'reset', '--hard', 'origin/main')
-        update(path, component, repository, tag)
+        update(path, component, repository, tag, target)
         git(checkout, 'diff', '--check')
         if git(checkout, 'diff', '--quiet', '--', file, check=False).returncode == 0:
             return
@@ -63,5 +70,6 @@ if __name__ == '__main__':
     parser.add_argument('--component', required=True)
     parser.add_argument('--repository', required=True)
     parser.add_argument('--tag', required=True)
+    parser.add_argument('--target', choices=['aws', 'local'], default='aws')
     args = parser.parse_args()
-    promote(args.checkout, args.file, args.component, args.repository, args.tag)
+    promote(args.checkout, args.file, args.component, args.repository, args.tag, target=args.target)

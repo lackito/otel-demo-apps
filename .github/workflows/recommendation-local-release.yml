@@ -7,6 +7,7 @@ on:
     paths:
       - apps/recommendation/**
       - .github/workflows/recommendation-local-release.yml
+      - scripts/promote.py
   workflow_dispatch:
 
 concurrency:
@@ -32,6 +33,14 @@ jobs:
     steps:
       - name: Check out application source
         uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install promotion dependency
+        run: |
+          python -m pip install --only-binary=:all: ruamel.yaml==0.18.16
 
       - name: Resolve immutable image reference
         id: image
@@ -63,13 +72,12 @@ jobs:
           ref: main
           token: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
           path: local-gitops
-          persist-credentials: false
+          persist-credentials: true
 
-      - name: Test the local values updater
-        run: >-
-          python3 -m unittest discover
-          -s .github/scripts
-          -p 'test_*.py'
+      - name: Test local promotion and legacy updater
+        run: |
+          python -m unittest discover -s tests -v
+          python -m unittest discover -s .github/scripts -p 'test_*.py'
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -131,31 +139,11 @@ jobs:
               exit 1
             }
 
-      - name: Update local desired image
+      - name: Promote verified image with concurrent-update retries
         env:
           IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
-          python3 .github/scripts/update_recommendation_values.py \
-            --file "local-gitops/${VALUES_FILE}" \
-            --repository "${IMAGE_REPOSITORY}" \
-            --tag "${IMAGE_TAG}"
-          git -C local-gitops diff --check
-          git -C local-gitops diff -- "${VALUES_FILE}"
-
-      - name: Commit and push local desired state
-        working-directory: local-gitops
-        env:
-          GITOPS_TOKEN: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
-          IMAGE_TAG: ${{ steps.image.outputs.tag }}
-        run: |
-          if git diff --quiet -- "${VALUES_FILE}"; then
-            echo "Local desired state already references ${IMAGE_TAG}."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "${VALUES_FILE}"
-          git commit -m "chore(recommendation): deploy ${IMAGE_TAG}"
-          git remote set-url origin "https://x-access-token:${GITOPS_TOKEN}@github.com/${LOCAL_GITOPS_REPOSITORY}.git"
-          git push origin HEAD:main
+          python scripts/promote.py --checkout local-gitops --file "$VALUES_FILE" \
+            --component recommendation --target local \
+            --repository "$IMAGE_REPOSITORY" --tag "$IMAGE_TAG"

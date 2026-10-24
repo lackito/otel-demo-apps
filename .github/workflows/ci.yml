@@ -38,8 +38,12 @@ jobs:
         run: docker run --rm -v "${PWD}:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
 
   custom-services:
-    name: Custom service build and compatibility tests
-    runs-on: ubuntu-latest
+    name: Custom services (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
