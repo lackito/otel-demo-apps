@@ -71,3 +71,7 @@ jobs:
           docker build -f apps/ad/Dockerfile -t ad:test .
           python scripts/smoke.py product-catalog catalog:test
           python scripts/smoke.py ad ad:test
+      - name: Build and regression test Recommendation
+        run: |
+          docker build -t recommendation:test apps/recommendation
+          python apps/recommendation/smoke.py recommendation:test

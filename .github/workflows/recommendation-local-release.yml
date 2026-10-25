@@ -28,7 +28,8 @@ jobs:
   release:
     name: Build, publish, and update local desired state (${{ github.sha }})
     if: github.ref == 'refs/heads/local'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
 
     steps:
       - name: Check out application source
@@ -38,9 +39,9 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install promotion dependency
+      - name: Install test and promotion dependencies
         run: |
-          python -m pip install --only-binary=:all: ruamel.yaml==0.18.16
+          python -m pip install --only-binary=:all: ruamel.yaml==0.18.16 grpcio==1.78.0 grpcio-tools==1.78.0
 
       - name: Resolve immutable image reference
         id: image
@@ -86,24 +87,31 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build and publish arm64 image
+      - name: Build native arm64 image
         uses: docker/build-push-action@v7
         with:
           context: apps/recommendation
           platforms: linux/arm64
-          push: true
+          load: true
           tags: ${{ steps.image.outputs.uri }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.image.outputs.tag }}
           cache-from: type=gha,scope=recommendation-local
           cache-to: type=gha,mode=max,scope=recommendation-local
+
+      - name: Test requests and telemetry before publishing
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: python apps/recommendation/smoke.py "$IMAGE_URI"
+
+      - name: Publish tested image
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: docker push "$IMAGE_URI"
 
       - name: Verify anonymous image access
         env:
