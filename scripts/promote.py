@@ -21,6 +21,8 @@ def update(path, component, repository, tag, target="aws"):
         raise ValueError('repository must match the target registry and component')
     yaml = YAML()
     yaml.preserve_quotes = True
+    # Preserve long scalar lines; wrapping Grafana queries can add trailing spaces.
+    yaml.width = 2**31 - 1
     yaml.indent(mapping=2, sequence=4, offset=2)
     data = yaml.load(path.read_text())
     service = data.setdefault('components', {}).setdefault(component, {})

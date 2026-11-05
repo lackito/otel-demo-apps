@@ -80,6 +80,23 @@ class PromotionTests(unittest.TestCase):
             with self.subTest(target=target, repository=repository), self.assertRaises(ValueError):
                 p.update(Path('/unused'), 'ad', repository, 'a'*40, target=target)
 
+    def test_preserves_long_query_without_whitespace_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            p.git(root, 'init', '--initial-branch=main')
+            path = root / 'values.yaml'
+            query = 'traceId:"$${__trace.traceId}" AND spanId:"$${__span.spanId}"'
+            line = '              query: ' + query
+            path.write_text('grafana:\n  datasources:\n    datasources.yaml:\n      datasources:\n        - jsonData:\n            tracesToLogsV2:\n' + line + '\ncomponents:\n  ad:\n    enabled: true\n')
+            p.git(root, 'add', 'values.yaml')
+            p.git(root, '-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-m', 'initial')
+            p.update(path, 'ad', 'ghcr.io/lackito/otel-demo-kind-ad', 'a'*40, target='kind')
+            p.git(root, 'diff', '--check')
+            self.assertIn(line + '\n', path.read_text())
+            data = YAML().load(path.read_text())
+            actual = data['grafana']['datasources']['datasources.yaml']['datasources'][0]['jsonData']['tracesToLogsV2']['query']
+            self.assertEqual(actual, query)
+
     def test_rejects_invalid_inputs(self):
         with self.assertRaises(ValueError):
             p.update(Path('/unused'), 'ad', 'wrong-repository', 'a'*40)
