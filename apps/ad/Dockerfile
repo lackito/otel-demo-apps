@@ -5,14 +5,14 @@
 FROM --platform=${BUILDPLATFORM} docker.io/library/eclipse-temurin:24.0.2_12-jdk@sha256:7493205ffe6caa8074fa8a06a276bb1c5ac41d3dd0fd43a0db66d7f776e80b3e AS builder
 WORKDIR /usr/src/app/
 
-COPY ./src/ad/gradlew* ./src/ad/settings.gradle* ./src/ad/build.gradle ./
-COPY ./src/ad/gradle ./gradle
+COPY ./apps/ad/gradlew* ./apps/ad/settings.gradle* ./apps/ad/build.gradle ./
+COPY ./apps/ad/gradle ./gradle
 
 RUN chmod +x ./gradlew
 RUN ./gradlew
 RUN ./gradlew downloadRepos
 
-COPY ./src/ad/ ./
+COPY ./apps/ad/ ./
 COPY ./pb/ ./proto
 RUN chmod +x ./gradlew
 RUN ./gradlew installDist -PprotoSourceDir=./proto
@@ -21,11 +21,11 @@ RUN ./gradlew installDist -PprotoSourceDir=./proto
 
 FROM docker.io/library/eclipse-temurin:24.0.2_12-jre@sha256:8cb2387a28af84cf0db0948d9c67d4480192f4e567027a3963f145d218e8b4f2
 
-ARG OTEL_JAVA_AGENT_VERSION
+ARG OTEL_JAVA_AGENT_VERSION=2.31.1
 WORKDIR /usr/src/app/
 
 COPY --from=builder /usr/src/app/ ./
-ADD --chmod=644 https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v$OTEL_JAVA_AGENT_VERSION/opentelemetry-javaagent.jar /usr/src/app/opentelemetry-javaagent.jar
+ADD --checksum=sha256:bbf83c151b6400709e2f225bdd07a04f839d9d13b8b93464241333fd25d3e3ba --chmod=644 https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v$OTEL_JAVA_AGENT_VERSION/opentelemetry-javaagent.jar /usr/src/app/opentelemetry-javaagent.jar
 ENV JAVA_TOOL_OPTIONS="-javaagent:/usr/src/app/opentelemetry-javaagent.jar -Xmx200m"
 
 EXPOSE ${AD_PORT}

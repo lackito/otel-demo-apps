@@ -116,3 +116,9 @@ attempting to assume the role.
 
 The release workflow intentionally updates the GitOps repository rather than
 deploying to Kubernetes directly. Argo CD remains the sole owner of workloads.
+
+## Custom Product Catalog and Ad delivery
+
+See [DELIVERY.md](DELIVERY.md) for chart-0.38.4 compatibility, builds, tests,
+AWS/GitOps release ordering, verification, and rollback. Implementation readiness
+is distinct from ECR publication and observed cluster rollout.

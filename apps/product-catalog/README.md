@@ -20,7 +20,7 @@ go build -o /go/bin/product-catalog/
 From the root directory, run:
 
 ```sh
-docker compose build product-catalog
+docker build -f apps/product-catalog/Dockerfile -t catalog:test .
 ```
 
 Database Calls Instrumentation
@@ -72,3 +72,6 @@ To bump all dependencies run:
 go get -u -t ./...
 go mod tidy
 ```
+
+See [delivery instructions](../../DELIVERY.md) for repository-root builds,
+chart 0.38.4 configuration, smoke tests, and release prerequisites.
