@@ -34,10 +34,10 @@ If you need to upgrade the version of gradle then run
 
 ## Building Docker
 
-From the root of `opentelemetry-demo`, run:
+From the root of `otel-demo-apps`, run:
 
 ```sh
-docker build --file ./src/ad/Dockerfile ./
+docker build --file ./apps/ad/Dockerfile ./
 ```
 
 ## Custom metrics: bridging Prometheus to OpenTelemetry
@@ -66,3 +66,6 @@ OpenTelemetry SDK for new custom metrics, and migrate existing
 Prometheus-client metrics to it - incremental migration as you touch
 the surrounding code has proven successful in practice, but a focused
 refactor works too; what matters is that the migration happens.
+
+See [delivery instructions](../../DELIVERY.md) for repository-root builds,
+chart 0.38.4 configuration, smoke tests, and release prerequisites.

@@ -10,17 +10,18 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
-	_ "github.com/lib/pq"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc/filters"
@@ -30,8 +31,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/log/global"
-	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.opentelemetry.io/otel/trace"
 
 	otelhooks "github.com/open-feature/go-sdk-contrib/hooks/open-telemetry/pkg"
@@ -45,8 +44,8 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
-	"github.com/XSAM/otelsql"
 	flags "github.com/opentelemetry/opentelemetry-demo/src/product-catalog/flags"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type productCatalog struct {
@@ -54,48 +53,50 @@ type productCatalog struct {
 }
 
 var (
-	logger *slog.Logger
-	db     *sql.DB
-	reg    metric.Registration
+	logger    *slog.Logger
+	catalogMu sync.RWMutex
+	products  []*pb.Product
 )
 
 func init() {
 	logger = otelslog.NewLogger("product-catalog")
 }
 
-func initDatabase() error {
-	connStr := os.Getenv("DB_CONNECTION_STRING")
-	if connStr == "" {
-		return fmt.Errorf("DB_CONNECTION_STRING environment variable not set")
-	}
-
-	dbAttrs := otelsql.WithAttributes(
-		append(otelsql.AttributesFromDSN(connStr), semconv.DBSystemNamePostgreSQL)...,
-	)
-
-	var err error
-	db, err = otelsql.Open("postgres", connStr,
-		dbAttrs,
-		otelsql.WithSQLCommenter(true),
-		otelsql.WithSpanOptions(otelsql.SpanOptions{
-			OmitConnResetSession: true,
-			OmitRows:             true,
-		}))
+// Load a complete snapshot before replacing the last known good catalog.
+// Glob ignores Kubernetes' hidden ConfigMap revision directories.
+func reloadProducts(dir string) error {
+	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
 	if err != nil {
-		return fmt.Errorf("failed to open database connection: %w", err)
+		return err
 	}
-
-	reg, err = otelsql.RegisterDBStatsMetrics(db, dbAttrs)
-	if err != nil {
-		return fmt.Errorf("failed to register database metrics: %w", err)
+	if len(files) == 0 {
+		return fmt.Errorf("no catalog JSON files in %s", dir)
 	}
-
-	// Test the connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
+	var next []*pb.Product
+	seen := map[string]bool{}
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		var response pb.ListProductsResponse
+		if err := protojson.Unmarshal(data, &response); err != nil {
+			return fmt.Errorf("%s: %w", file, err)
+		}
+		for _, product := range response.Products {
+			if product.Id == "" || seen[product.Id] {
+				return fmt.Errorf("missing or duplicate product ID in %s", file)
+			}
+			seen[product.Id] = true
+			next = append(next, product)
+		}
 	}
-
-	logger.Info("Database connection established")
+	if len(next) == 0 {
+		return fmt.Errorf("empty product catalog")
+	}
+	catalogMu.Lock()
+	products = next
+	catalogMu.Unlock()
 	return nil
 }
 
@@ -121,24 +122,35 @@ func main() {
 	global.SetLoggerProvider(sdk.LoggerProvider())
 	otel.SetTextMapPropagator(sdk.Propagator())
 
-	// Initialize database connection
-	if err := initDatabase(); err != nil {
-		logger.Error(fmt.Sprintf("Error initializing database: %v", err))
+	dir := os.Getenv("PRODUCT_CATALOG_PRODUCTS_PATH")
+	if dir == "" {
+		dir = "products"
+	}
+	interval := 10
+	if value := os.Getenv("PRODUCT_CATALOG_RELOAD_INTERVAL"); value != "" {
+		interval, err = strconv.Atoi(value)
+		if err != nil || interval <= 0 {
+			logger.Error("Invalid catalog reload interval")
+			os.Exit(1)
+		}
+	}
+	if err := reloadProducts(dir); err != nil {
+		logger.Error(err.Error())
 		os.Exit(1)
 	}
-	defer func() {
-		if db != nil {
-			if err := db.Close(); err != nil {
-				logger.Error(fmt.Sprintf("Error closing database connection: %v", err))
-			} else {
-				logger.Info("Database connection closed")
-			}
-		}
-		if reg != nil {
-			if err := reg.Unregister(); err != nil {
-				logger.Error(fmt.Sprintf("Error unregistering database metrics: %v", err))
-			} else {
-				logger.Info("Database metrics unregistered")
+	reloadCtx, stopReload := context.WithCancel(ctx)
+	defer stopReload()
+	go func() {
+		ticker := time.NewTicker(time.Duration(interval) * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-reloadCtx.Done():
+				return
+			case <-ticker.C:
+				if err := reloadProducts(dir); err != nil {
+					logger.Error("Catalog reload failed; retaining previous snapshot", "error", err)
+				}
 			}
 		}
 	}()
@@ -169,6 +181,7 @@ func main() {
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		logger.Error(fmt.Sprintf("TCP Listen: %v", err))
+		os.Exit(1)
 	}
 
 	srv := grpc.NewServer(
@@ -199,137 +212,32 @@ func main() {
 	logger.Info("Product Catalog gRPC server stopped")
 }
 
-func loadProductsFromDB(ctx context.Context) ([]*pb.Product, error) {
-	if db == nil {
-		return nil, fmt.Errorf("database connection not initialized")
-	}
-
-	// Query all products with categories
-	rows, err := db.QueryContext(ctx, `
-		SELECT p.id, p.name, p.description, p.picture, 
-		       p.price_currency_code, p.price_units, p.price_nanos, p.categories
-		FROM catalog.products p
-		ORDER BY p.id
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query products: %w", err)
-	}
-	defer rows.Close()
-
-	products, err := getProductsFromRows(ctx, rows)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get products from rows: %w", err)
-	}
-
-	return products, nil
+func loadProducts(ctx context.Context) ([]*pb.Product, error) {
+	catalogMu.RLock()
+	defer catalogMu.RUnlock()
+	return append([]*pb.Product(nil), products...), nil
 }
 
-func searchProductsFromDB(ctx context.Context, query string) ([]*pb.Product, error) {
-	if db == nil {
-		return nil, fmt.Errorf("database connection not initialized")
-	}
-
-	// Query products matching search query in name or description
-	searchPattern := "%" + strings.ToLower(query) + "%"
-	rows, err := db.QueryContext(ctx, `
-		SELECT p.id, p.name, p.description, p.picture, 
-		       p.price_currency_code, p.price_units, p.price_nanos, p.categories
-		FROM catalog.products p
-		WHERE LOWER(p.name) LIKE $1 OR LOWER(p.description) LIKE $1
-		ORDER BY p.id
-	`, searchPattern)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query products: %w", err)
-	}
-	defer rows.Close()
-
-	products, err := getProductsFromRows(ctx, rows)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get products from rows: %w", err)
-	}
-
-	return products, nil
-}
-
-func getProductFromDB(ctx context.Context, productID string) (*pb.Product, error) {
-	if db == nil {
-		return nil, fmt.Errorf("database connection not initialized")
-	}
-
-	// Query single product by ID
-	row := db.QueryRowContext(ctx, `
-		SELECT p.id, p.name, p.description, p.picture, 
-		       p.price_currency_code, p.price_units, p.price_nanos, p.categories
-		FROM catalog.products p
-		WHERE p.id = $1
-	`, productID)
-
-	var id, name, description, picture, currencyCode, categoriesStr string
-	var units int64
-	var nanos int32
-
-	if err := row.Scan(&id, &name, &description, &picture, &currencyCode, &units, &nanos, &categoriesStr); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("product not found")
-		}
-		return nil, fmt.Errorf("failed to scan product row: %w", err)
-	}
-
-	return parseProductRow(id, name, description, picture, currencyCode, categoriesStr, units, nanos), nil
-}
-
-func getProductsFromRows(ctx context.Context, rows *sql.Rows) ([]*pb.Product, error) {
-	var products []*pb.Product
-
-	for rows.Next() {
-		var id, name, description, picture, currencyCode, categoriesStr string
-		var units int64
-		var nanos int32
-
-		if err := rows.Scan(&id, &name, &description, &picture, &currencyCode, &units, &nanos, &categoriesStr); err != nil {
-			return nil, fmt.Errorf("failed to scan product row: %w", err)
-		}
-
-		products = append(products, parseProductRow(id, name, description, picture, currencyCode, categoriesStr, units, nanos))
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating product rows: %w", err)
-	}
-
-	logger.LogAttrs(
-		ctx,
-		slog.LevelInfo,
-		fmt.Sprintf("Found %d products from database", len(products)),
-		slog.Int("products", len(products)),
-	)
-
-	return products, nil
-}
-
-func parseProductRow(id, name, description, picture, currencyCode, categoriesStr string, units int64, nanos int32) *pb.Product {
-	// Parse comma-delimited categories string into slice
-	var categories []string
-	if categoriesStr != "" {
-		categories = strings.Split(categoriesStr, ",")
-		// Trim whitespace from each category
-		for i, cat := range categories {
-			categories[i] = strings.TrimSpace(cat)
+func searchProducts(ctx context.Context, query string) ([]*pb.Product, error) {
+	all, _ := loadProducts(ctx)
+	var result []*pb.Product
+	query = strings.ToLower(query)
+	for _, product := range all {
+		if strings.Contains(strings.ToLower(product.Name), query) || strings.Contains(strings.ToLower(product.Description), query) {
+			result = append(result, product)
 		}
 	}
+	return result, nil
+}
 
-	return &pb.Product{
-		Id:          id,
-		Name:        name,
-		Description: description,
-		Picture:     picture,
-		PriceUsd: &pb.Money{
-			CurrencyCode: currencyCode,
-			Units:        units,
-			Nanos:        nanos,
-		},
-		Categories: categories,
+func getProduct(ctx context.Context, id string) (*pb.Product, error) {
+	all, _ := loadProducts(ctx)
+	for _, product := range all {
+		if product.Id == id {
+			return product, nil
+		}
 	}
+	return nil, fmt.Errorf("product not found")
 }
 
 func mustMapEnv(target *string, key string) {
@@ -351,7 +259,7 @@ func (p *productCatalog) Watch(req *healthpb.HealthCheckRequest, ws healthpb.Hea
 func (p *productCatalog) ListProducts(ctx context.Context, req *pb.Empty) (*pb.ListProductsResponse, error) {
 	span := trace.SpanFromContext(ctx)
 
-	products, err := loadProductsFromDB(ctx)
+	products, err := loadProducts(ctx)
 	if err != nil {
 		span.SetStatus(otelcodes.Error, err.Error())
 		return nil, status.Errorf(codes.Internal, "failed to load products: %v", err)
@@ -377,7 +285,7 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 		return nil, status.Error(codes.Internal, msg)
 	}
 
-	found, err := getProductFromDB(ctx, req.Id)
+	found, err := getProduct(ctx, req.Id)
 	if err != nil {
 		msg := fmt.Sprintf("Product Not Found: %s", req.Id)
 		span.SetStatus(otelcodes.Error, msg)
@@ -404,7 +312,7 @@ func (p *productCatalog) GetProduct(ctx context.Context, req *pb.GetProductReque
 func (p *productCatalog) SearchProducts(ctx context.Context, req *pb.SearchProductsRequest) (*pb.SearchProductsResponse, error) {
 	span := trace.SpanFromContext(ctx)
 
-	result, err := searchProductsFromDB(ctx, req.Query)
+	result, err := searchProducts(ctx, req.Query)
 	if err != nil {
 		span.SetStatus(otelcodes.Error, err.Error())
 		return nil, status.Errorf(codes.Internal, "failed to search products: %v", err)
