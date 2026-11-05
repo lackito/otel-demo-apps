@@ -15,7 +15,7 @@ def update(path, component, repository, tag, target="aws"):
         raise ValueError('tag must be a full Git SHA')
     patterns = {
         'aws': r'\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/' + re.escape(component),
-        'local': r'ghcr\.io/[a-z0-9][a-z0-9-]*/otel-demo-local-' + re.escape(component),
+        'kind': r'ghcr\.io/[a-z0-9][a-z0-9-]*/otel-demo-kind-' + re.escape(component),
     }
     if target not in patterns or not re.fullmatch(patterns[target], repository):
         raise ValueError('repository must match the target registry and component')
@@ -26,7 +26,7 @@ def update(path, component, repository, tag, target="aws"):
     service = data.setdefault('components', {}).setdefault(component, {})
     override = service.setdefault('imageOverride', {})
     override.update(repository=repository, tag=tag)
-    if target == 'local':
+    if target == 'kind':
         override['pullPolicy'] = 'IfNotPresent'
     with path.open('w') as output:
         yaml.dump(data, output)
@@ -70,6 +70,6 @@ if __name__ == '__main__':
     parser.add_argument('--component', required=True)
     parser.add_argument('--repository', required=True)
     parser.add_argument('--tag', required=True)
-    parser.add_argument('--target', choices=['aws', 'local'], default='aws')
+    parser.add_argument('--target', choices=['aws', 'kind'], default='aws')
     args = parser.parse_args()
     promote(args.checkout, args.file, args.component, args.repository, args.tag, target=args.target)

@@ -50,13 +50,16 @@ Ad vendors the missing protocol input under `pb/`. The agent is pinned to
 ## Rollout order (operator action)
 
 1. Review and apply infrastructure layer 04 after a saved Terraform plan.
-   Expect two additional ECR repositories and publisher roles; no existing
-   repository, Recommendation role, or OIDC provider replacement. The existing
+   On a fresh deployment expect the service ECR repositories and publisher roles.
+   The naming migration uses `otel-demo-aws-dev-*` roles and assumes the old
+   environment was destroyed; inspect the actual saved plan before applying. The existing
    Recommendation role gets repository-scoped pull/inspection permissions.
-2. Configure `GITOPS_REPOSITORY_TOKEN` in this repository with contents-write
-   permission only for `lackito/otel-demo-gitops`; it must be able to update
+2. Configure `AWS_GITOPS_REPOSITORY_TOKEN` in this repository with contents-write
+   permission only for `lackito/otel-demo-gitops-aws`; it must be able to update
    `main` under that repository's branch rules. AWS uses OIDC, not static keys.
-3. Review application changes before merging to `main`: **the merge triggers
+3. Configure the `AWS_RELEASES_ENABLED` repository variable as `true` only after
+   AWS infrastructure and publisher roles exist. Review application changes before
+   merging to `main`: **the merge triggers
    the path-filtered release workflows and can activate images through Argo CD**.
    Manual dispatch is allowed only on main. CI must pass first.
 4. Each release builds an image tagged with the full source SHA, pushes ECR,
@@ -119,9 +122,9 @@ prove receipt at a test collector, not delivery to an EKS telemetry backend.
 ## Local GHCR delivery for kind
 
 The local release workflows for Recommendation, Product Catalog, and Ad run
-on path-filtered pushes to `local`, or manual dispatch selecting `local`.
+on path-filtered pushes to `kind`, or manual dispatch selecting `kind`.
 The implementation branch itself does not trigger publication. Review and
-integrate the local-delivery changes into `local` before pushing that branch;
+integrate the local-delivery changes into `kind` before pushing that branch;
 that push is a release action. Do not merge into main to test local delivery.
 
 Catalog and Ad use native `ubuntu-24.04-arm` runners, Python 3.12, and
@@ -133,18 +136,18 @@ CI checks both native ARM64 and AMD64.
 
 Required existing secrets in otel-demo-apps:
 - `GHCR_PAT`: the repository owner's classic PAT with write:packages.
-- `LOCAL_GITOPS_REPOSITORY_TOKEN`: contents read/write for otel-demo-gitops-local,
+- `KIND_GITOPS_REPOSITORY_TOKEN`: contents read/write for otel-demo-gitops-kind,
   including permission to push its main branch under applicable branch rules.
 
 New packages must be public for anonymous cluster pulls:
-`ghcr.io/lackito/otel-demo-local-product-catalog` and
-`ghcr.io/lackito/otel-demo-local-ad`. A first run may publish successfully but
+`ghcr.io/lackito/otel-demo-kind-product-catalog` and
+`ghcr.io/lackito/otel-demo-kind-ad`. A first run may publish successfully but
 stop at the anonymous pull if package visibility is private. Make that package
 public, then rerun. No GitOps activation occurs until all verification passes.
 
 Images use the full source commit SHA as tag. GHCR tags are not intrinsically
 immutable; avoid overwriting released tags and retain digest evidence.
-Recommendation, Ad, and Catalog all use scripts/promote.py with --target local.
+Recommendation, Ad, and Catalog all use scripts/promote.py with --target kind.
 Each edit changes only its own image repository/tag/pullPolicy, preserves other
 configuration, sets IfNotPresent, and retries ordinary pushes against latest
 main. The default --target aws still validates ECR repositories separately.
@@ -158,10 +161,10 @@ main. The default --target aws still validates ECR repositories separately.
    not become active until those parameters are removed.
 3. Remove only the six Catalog/Ad imageOverride parameters, preserving any
    unrelated overrides. Do this only after both published images are verified.
-4. Refresh Argo CD and run application-validate from otel-demo-local. Inspect
+4. Refresh Argo CD and run application-validate from otel-demo-infra-kind. Inspect
    all three Deployment image references and pod image IDs. Browse products
    and ads and verify new traces in Jaeger; check restarts and memory usage.
-5. For later releases, source changes on local publish and promote without
+5. For later releases, source changes on kind publish and promote without
    kind load or manual image overrides. A recreated cluster pulls public GHCR
    images normally.
 
@@ -171,3 +174,12 @@ apply when migrating another cluster that still has temporary overrides.
 Rollback uses a previous verified service SHA in local GitOps, followed by
 Argo CD reconciliation. For a first custom release, remove only that service's
 imageOverride to restore the pinned chart default.
+
+## Naming transition
+
+Follow [docs/NAMING.md](docs/NAMING.md) before enabling renamed release paths.
+Use the `kind` source branch and `--target kind`, `KIND_GITOPS_REPOSITORY_TOKEN`
+for kind, and `AWS_GITOPS_REPOSITORY_TOKEN` for AWS. AWS release jobs skip unless
+`AWS_RELEASES_ENABLED=true`; this permits merging the naming change while AWS
+infrastructure is destroyed. Existing kind GitOps image references remain pinned
+to published bootstrap packages until verified kind-named replacements exist.
