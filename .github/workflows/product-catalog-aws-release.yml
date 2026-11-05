@@ -1,17 +1,20 @@
-name: Release recommendation service
+name: Release product-catalog service to AWS
 
 on:
   push:
     branches:
       - main
     paths:
-      - apps/recommendation/**
-      - .github/workflows/recommendation-release.yml
+      - apps/product-catalog/**
+      - .github/workflows/product-catalog-aws-release.yml
       - scripts/promote.py
+      - scripts/smoke.py
+      - pb/**
+      - tests/fixtures/**
   workflow_dispatch:
 
 concurrency:
-  group: recommendation-release-main
+  group: product-catalog-aws-release-main
   cancel-in-progress: false
 
 permissions:
@@ -20,15 +23,15 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  AWS_ROLE_TO_ASSUME: arn:aws:iam::650032249451:role/otel-demo-dev-recommendation-github-actions
+  AWS_ROLE_TO_ASSUME: arn:aws:iam::650032249451:role/otel-demo-aws-dev-product-catalog-github-actions
   AWS_OIDC_SUBJECT: repo:lackito@6595109/otel-demo-apps@1305341394:ref:refs/heads/main
-  ECR_REPOSITORY: recommendation
-  GITOPS_REPOSITORY: lackito/otel-demo-gitops
+  ECR_REPOSITORY: product-catalog
+  AWS_GITOPS_REPOSITORY: lackito/otel-demo-gitops-aws
   GITOPS_VALUES_FILE: applications/otel-demo/values.yaml
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.AWS_RELEASES_ENABLED == 'true'
     name: Build, publish, and promote (${{ github.sha }})
     runs-on: ubuntu-latest
 
@@ -68,7 +71,7 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
-          role-session-name: recommendation-release-${{ github.run_id }}
+          role-session-name: product-catalog-aws-release-${{ github.run_id }}
 
       - name: Log in to Amazon ECR
         id: ecr-login
@@ -83,22 +86,21 @@ jobs:
           image_uri="${REGISTRY}/${ECR_REPOSITORY}:${image_tag}"
           # Immutable repositories allow reruns to reuse an already published SHA.
           if ! aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$image_tag" >/dev/null 2>&1; then
-            docker build --tag "${image_uri}" apps/recommendation
+            docker build -f apps/product-catalog/Dockerfile --tag "${image_uri}" .
             docker push "${image_uri}"
           fi
           docker pull "${image_uri}"
           python -m pip install --only-binary=:all: grpcio==1.78.0 grpcio-tools==1.78.0
-          python apps/recommendation/smoke.py "${image_uri}"
-          aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$image_tag"
+          python scripts/smoke.py product-catalog "${image_uri}"
           echo "tag=${image_tag}" >> "$GITHUB_OUTPUT"
           echo "uri=${image_uri}" >> "$GITHUB_OUTPUT"
 
       - name: Check out GitOps configuration
         uses: actions/checkout@v6
         with:
-          repository: ${{ env.GITOPS_REPOSITORY }}
-          token: ${{ secrets.GITOPS_REPOSITORY_TOKEN }}
-          path: gitops
+          repository: ${{ env.AWS_GITOPS_REPOSITORY }}
+          token: ${{ secrets.AWS_GITOPS_REPOSITORY_TOKEN }}
+          path: aws-gitops
           ref: main
 
       - name: Install promotion dependency
@@ -109,5 +111,5 @@ jobs:
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
-          python scripts/promote.py --checkout gitops --file "$GITOPS_VALUES_FILE" \
+          python scripts/promote.py --checkout aws-gitops --file "$GITOPS_VALUES_FILE" \
             --component "$ECR_REPOSITORY" --repository "$REGISTRY/$ECR_REPOSITORY" --tag "$IMAGE_TAG"

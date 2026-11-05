@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - local
+      - kind
   pull_request:
 
 permissions:

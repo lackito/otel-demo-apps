@@ -1,17 +1,17 @@
-name: Release recommendation service to local Kubernetes
+name: Release recommendation service to kind
 
 on:
   push:
     branches:
-      - local
+      - kind
     paths:
       - apps/recommendation/**
-      - .github/workflows/recommendation-local-release.yml
+      - .github/workflows/recommendation-kind-release.yml
       - scripts/promote.py
   workflow_dispatch:
 
 concurrency:
-  group: recommendation-local-release
+  group: recommendation-kind-release
   cancel-in-progress: false
 
 permissions:
@@ -19,15 +19,15 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: otel-demo-local-recommendation
-  LOCAL_GITOPS_REPOSITORY: lackito/otel-demo-gitops-local
+  IMAGE_NAME: otel-demo-kind-recommendation
+  KIND_GITOPS_REPOSITORY: lackito/otel-demo-gitops-kind
   REGISTRY: ghcr.io
   VALUES_FILE: applications/otel-demo/values.yaml
 
 jobs:
   release:
-    name: Build, publish, and update local desired state (${{ github.sha }})
-    if: github.ref == 'refs/heads/local'
+    name: Build, publish, and update kind desired state (${{ github.sha }})
+    if: github.ref == 'refs/heads/kind'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
 
@@ -55,27 +55,27 @@ jobs:
             echo "uri=${image_repository}:${source_revision}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Verify local GitOps write access
+      - name: Verify kind GitOps write access
         env:
-          GH_TOKEN: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
+          GH_TOKEN: ${{ secrets.KIND_GITOPS_REPOSITORY_TOKEN }}
         shell: bash
         run: |
-          if [[ "$(gh api "repos/${LOCAL_GITOPS_REPOSITORY}" --jq '.permissions.push')" != "true" ]]; then
-            echo "LOCAL_GITOPS_REPOSITORY_TOKEN cannot write to ${LOCAL_GITOPS_REPOSITORY}." >&2
+          if [[ "$(gh api "repos/${KIND_GITOPS_REPOSITORY}" --jq '.permissions.push')" != "true" ]]; then
+            echo "KIND_GITOPS_REPOSITORY_TOKEN cannot write to ${KIND_GITOPS_REPOSITORY}." >&2
             echo "Grant the fine-grained token access to this repository with Contents: Read and write." >&2
             exit 1
           fi
 
-      - name: Check out local GitOps configuration
+      - name: Check out kind GitOps configuration
         uses: actions/checkout@v6
         with:
-          repository: ${{ env.LOCAL_GITOPS_REPOSITORY }}
+          repository: ${{ env.KIND_GITOPS_REPOSITORY }}
           ref: main
-          token: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
-          path: local-gitops
+          token: ${{ secrets.KIND_GITOPS_REPOSITORY_TOKEN }}
+          path: kind-gitops
           persist-credentials: true
 
-      - name: Test local promotion
+      - name: Test kind promotion
         run: python -m unittest discover -s tests -v
 
       - name: Log in to GitHub Container Registry
@@ -98,8 +98,8 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.image.outputs.tag }}
-          cache-from: type=gha,scope=recommendation-local
-          cache-to: type=gha,mode=max,scope=recommendation-local
+          cache-from: type=gha,scope=recommendation-kind
+          cache-to: type=gha,mode=max,scope=recommendation-kind
 
       - name: Test requests and telemetry before publishing
         env:
@@ -150,6 +150,6 @@ jobs:
           IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
-          python scripts/promote.py --checkout local-gitops --file "$VALUES_FILE" \
-            --component recommendation --target local \
+          python scripts/promote.py --checkout kind-gitops --file "$VALUES_FILE" \
+            --component recommendation --target kind \
             --repository "$IMAGE_REPOSITORY" --tag "$IMAGE_TAG"

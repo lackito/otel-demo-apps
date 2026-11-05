@@ -1,19 +1,19 @@
-name: Release product-catalog service to local Kubernetes
+name: Release ad service to kind
 
 on:
   push:
-    branches: [local]
+    branches: [kind]
     paths:
-      - apps/product-catalog/**
+      - apps/ad/**
       - pb/**
       - scripts/smoke.py
       - scripts/promote.py
       - tests/fixtures/**
-      - .github/workflows/product-catalog-local-release.yml
+      - .github/workflows/ad-kind-release.yml
   workflow_dispatch:
 
 concurrency:
-  group: product-catalog-local-release
+  group: ad-kind-release
   cancel-in-progress: false
 
 permissions:
@@ -21,12 +21,12 @@ permissions:
   packages: write
 
 env:
-  LOCAL_GITOPS_REPOSITORY: lackito/otel-demo-gitops-local
+  KIND_GITOPS_REPOSITORY: lackito/otel-demo-gitops-kind
   VALUES_FILE: applications/otel-demo/values.yaml
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/local'
+    if: github.ref == 'refs/heads/kind'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     steps:
@@ -42,14 +42,14 @@ jobs:
       - name: Resolve image reference
         id: image
         run: |
-          repository="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/otel-demo-local-product-catalog"
+          repository="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/otel-demo-kind-ad"
           echo "repository=$repository" >> "$GITHUB_OUTPUT"
           echo "uri=$repository:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
-      - name: Verify local GitOps write access
+      - name: Verify kind GitOps write access
         env:
-          GH_TOKEN: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
+          GH_TOKEN: ${{ secrets.KIND_GITOPS_REPOSITORY_TOKEN }}
         run: |
-          test "$(gh api "repos/$LOCAL_GITOPS_REPOSITORY" --jq '.permissions.push')" = true
+          test "$(gh api "repos/$KIND_GITOPS_REPOSITORY" --jq '.permissions.push')" = true
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
@@ -60,11 +60,11 @@ jobs:
         env:
           IMAGE_URI: ${{ steps.image.outputs.uri }}
         run: |
-          docker build --platform linux/arm64 -f apps/product-catalog/Dockerfile \
+          docker build --platform linux/arm64 -f apps/ad/Dockerfile \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             -t "$IMAGE_URI" .
-          python scripts/smoke.py product-catalog "$IMAGE_URI"
+          python scripts/smoke.py ad "$IMAGE_URI"
       - name: Publish image
         env:
           IMAGE_URI: ${{ steps.image.outputs.uri }}
@@ -77,22 +77,22 @@ jobs:
           trap 'rm -rf "$anonymous_config"' EXIT
           # Empty Docker credentials ensure kind can pull without imagePullSecrets.
           docker --config "$anonymous_config" pull "$IMAGE_URI" || {
-            echo "Make the GHCR package public, then rerun this local-branch workflow." >&2
+            echo "Make the GHCR package public, then rerun this kind-branch workflow." >&2
             exit 1
           }
-          python scripts/smoke.py product-catalog "$IMAGE_URI"
+          python scripts/smoke.py ad "$IMAGE_URI"
           docker image inspect "$IMAGE_URI" --format '{{json .RepoDigests}}' >> "$GITHUB_STEP_SUMMARY"
-      - name: Check out local GitOps
+      - name: Check out kind GitOps
         uses: actions/checkout@v6
         with:
-          repository: ${{ env.LOCAL_GITOPS_REPOSITORY }}
+          repository: ${{ env.KIND_GITOPS_REPOSITORY }}
           ref: main
-          token: ${{ secrets.LOCAL_GITOPS_REPOSITORY_TOKEN }}
-          path: local-gitops
+          token: ${{ secrets.KIND_GITOPS_REPOSITORY_TOKEN }}
+          path: kind-gitops
       - name: Promote verified image with concurrent-update retries
         env:
           IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
         run: |
-          python scripts/promote.py --checkout local-gitops --file "$VALUES_FILE" \
-            --component product-catalog --target local \
+          python scripts/promote.py --checkout kind-gitops --file "$VALUES_FILE" \
+            --component ad --target kind \
             --repository "$IMAGE_REPOSITORY" --tag "$GITHUB_SHA"
