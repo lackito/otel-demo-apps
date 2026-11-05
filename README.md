@@ -23,7 +23,7 @@ release all three. CI builds and tests both native ARM64 and AMD64 images.
 | --- | --- |
 | `AWS_GITOPS_REPOSITORY_TOKEN` secret | Contents read/write for `lackito/otel-demo-gitops-aws` |
 | `KIND_GITOPS_REPOSITORY_TOKEN` secret | Contents read/write for `lackito/otel-demo-gitops-kind` |
-| `GHCR_PAT` secret | Package publication; existing classic PAT with `write:packages` |
+| `GITHUB_TOKEN` (automatic) | GHCR publication with workflow `packages: write`; no registry PAT secret required |
 | `AWS_RELEASES_ENABLED` Actions variable | Set to `true` after AWS infrastructure and publisher roles are rebuilt; AWS release jobs otherwise skip |
 
 AWS releases use main-only GitHub OIDC and repository-scoped ECR publisher roles.
