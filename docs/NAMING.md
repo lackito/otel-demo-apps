@@ -49,7 +49,8 @@ Do not delete existing state files or the state bucket as part of renaming.
    Contents read/write for `otel-demo-gitops-kind`. These replace the old
    `GITOPS_REPOSITORY_TOKEN` and `LOCAL_GITOPS_REPOSITORY_TOKEN` names. Reuse
    valid token credentials after confirming repository access; do not paste
-   credentials into source. Keep `GHCR_PAT` unchanged. Verify repo-scoped
+   credentials into source. GHCR publishing uses the automatic `GITHUB_TOKEN`
+   with workflow `packages: write`; no registry PAT is required. Verify repo-scoped
    integrations and branch rules in GitHub after renaming.
 5. Merge both GitOps naming PRs, then both infrastructure naming PRs, then the
    application naming PR. All five target main. No rename PR itself provisions

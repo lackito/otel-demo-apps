@@ -134,8 +134,9 @@ the smoke tests before promotion. The workflow summary records the published
 digest. These workflows completed on GitHub and promoted the public packages.
 CI checks both native ARM64 and AMD64.
 
-Required existing secrets in otel-demo-apps:
-- `GHCR_PAT`: the repository owner's classic PAT with write:packages.
+GHCR publication uses the automatic `GITHUB_TOKEN` with `packages: write`.
+No registry PAT is required. Cross-repository GitOps access still requires this
+secret in otel-demo-apps:
 - `KIND_GITOPS_REPOSITORY_TOKEN`: contents read/write for otel-demo-gitops-kind,
   including permission to push its main branch under applicable branch rules.
 
