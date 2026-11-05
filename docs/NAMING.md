@@ -10,8 +10,8 @@ may still describe files or workstation use, but environment identities use kind
 | Desired state | otel-demo-gitops-aws | otel-demo-gitops-kind |
 | Source | otel-demo-apps / main | otel-demo-apps / kind |
 | Argo CD Application | otel-demo-aws | otel-demo-kind |
-| Cluster | otel-demo-aws-dev | otel-demo-kind |
-| kubectl context | EKS-generated context | kind-otel-demo-kind |
+| Cluster | otel-demo-aws-dev | otel-demo |
+| kubectl context | EKS-generated context | kind-otel-demo |
 | Publisher roles | otel-demo-aws-dev-<service>-github-actions | None |
 | New image packages | ECR service repositories | GHCR otel-demo-kind-<service> |
 
@@ -65,7 +65,7 @@ Do not delete existing state files or the state bucket as part of renaming.
    Inspect all three GitOps updates before recreating kind.
 8. Recreate kind using `otel-demo-infra-kind` and validate cluster, platform,
    application, routing, and telemetry using its Make targets. The cluster is
-   `otel-demo-kind`; Argo watches the canonical renamed kind GitOps URL.
+   `otel-demo`; Argo watches the canonical renamed kind GitOps URL.
 9. When ready for AWS, review and apply its Terraform layers, confirm publisher
    roles and token access, set `AWS_RELEASES_ENABLED=true`, and explicitly
    dispatch the three AWS workflows on main. Verify ECR digests and Argo/EKS
