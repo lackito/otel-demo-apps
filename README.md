@@ -40,6 +40,8 @@ reconciles the resulting commit. CI does not deploy directly to Kubernetes.
 
 ## Build, verify, and migrate
 
+- [Branching strategy](docs/BRANCHING.md): develop on feature branches, validate on kind, review into main, and synchronize main changes back into kind when needed.
+
 - [DELIVERY.md](DELIVERY.md): pinned-chart compatibility, builds, regression tests, promotion, verification, and rollback.
 - [Naming migration](docs/NAMING.md): repository rename order, secret names, kind branch bootstrap, and resource identities.
 - [Architecture walkthrough](https://github.com/lackito/otel-demo-infra-kind/blob/main/docs/ARCHITECTURE.md): shared delivery model and ownership boundaries.

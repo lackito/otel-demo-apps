@@ -1,5 +1,8 @@
 # Custom service delivery (chart 0.38.4)
 
+See the [application branching strategy](docs/BRANCHING.md) for feature-to-kind
+testing, main PRs, and when to synchronize main back into kind.
+
 Product Catalog and Ad now have build and AWS release paths alongside
 Recommendation. This implements delivery; it is not evidence of an ECR publish
 or an EKS rollout. The upstream chart remains pinned at 0.38.4. No PostgreSQL
