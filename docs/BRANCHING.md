@@ -1,102 +1,67 @@
-# Application branching and release strategy
+# Application branching
 
-This strategy applies to `otel-demo-apps`. Both infrastructure repositories and
-both GitOps repositories use `main` for their own environment; they do not need
-an application-style `kind` release branch.
+Use feature branches for development, `kind` for local releases, and `main` for
+reviewed AWS releases. Infrastructure and GitOps repositories use `main` for
+their own environment; they do not need a `kind` release branch.
 
-| Application branch | Purpose | Release behavior |
-| --- | --- | --- |
-| Feature branch, such as `feature/catalog-reload` | Develop and review one change | No image release from a feature-branch push |
-| `kind` | Integrate changes for local validation | Matching source/workflow changes publish to GHCR and promote kind GitOps |
-| `main` | Reviewed source for AWS | Matching changes publish to ECR and promote AWS GitOps when `AWS_RELEASES_ENABLED=true` |
-
-CI runs for pull requests and pushes to `main` or `kind`. A feature-branch push
-alone does not trigger the current CI workflow. Creating a PR does not release
-an AWS image; merging it into enabled `main` can.
-
-## Development routine
+## Normal workflow
 
 1. Create a feature branch from updated `main` and commit the change.
-2. Merge that feature branch into updated `kind` and push `kind` to test it.
-3. Verify the release run, GitOps image update, Argo rollout, application
-   behavior, traces, metrics, and logs.
-4. Push the feature branch and open a PR from it into `main`. Merge the PR
-   after review and CI. Keep unrelated kind experiments out of that PR.
-5. Bring `main` into `kind` when `main` has changes or merge results that
-   `kind` does not yet contain. This keeps local testing aligned with reviewed
-   source. It does not apply the same feature twice, and is not mandatory after
-   every feature when there is nothing new to synchronize.
+2. Merge the feature into `kind` and push to test it locally.
+3. Check the release job, image, rollout, application behavior, and telemetry.
+4. Open a PR from the feature branch into `main`. Review and merge it when ready.
+5. Merge updated `main` into `kind` when it contains changes kind has not received.
 
-Example, starting in the application repository:
+Example for Product Catalog; use the same process for Ad or Recommendation:
 
 ```bash
 git fetch origin
 git switch main
 git pull --ff-only
-git switch -c feature/catalog-reload
-# Edit and commit the intended files.
+git switch -c feature/catalog-change
+# Edit the service, then commit the intended files.
 git add apps/product-catalog/
-git commit -m "feat(catalog): describe the actual change"
+git commit -m "feat(catalog): describe the change"
 
 git switch kind
 git pull --ff-only
-git merge feature/catalog-reload
+git merge feature/catalog-change
 git push origin kind
-# Wait for CI/release and validate the running application and telemetry.
+# Wait for the release and test the application.
 
-git push -u origin feature/catalog-reload
-# Open a PR: feature/catalog-reload -> main.
+git push -u origin feature/catalog-change
+# Open a PR from feature/catalog-change into main.
 ```
 
-After the PR is merged, synchronize reviewed main changes into kind as needed:
+CI runs for pull requests and pushes to `main` or `kind`. Pushing a feature
+branch alone does not run the current CI or release workflows. A merge into
+`main` can release matching services when `AWS_RELEASES_ENABLED=true`.
+
+## Keeping kind current
+
+Merging main into kind does not apply the same feature twice. It brings in
+other reviewed fixes or changes made during PR review. If both branches already
+contain the same code, the merge may only align their histories.
 
 ```bash
 git fetch origin
 git switch kind
 git pull --ff-only
-git merge origin/main
-# If conflicts occur, resolve and review them before committing/pushing.
+git merge origin/main -m "Merge main into kind to sync reviewed changes"
 git push origin kind
 ```
 
-`git pull --ff-only` stops if the local checkout has diverged from its remote;
-inspect and reconcile those changes rather than resetting or force-pushing.
+If Git reports `Already up to date`, nothing more is needed. A fast-forward
+uses existing commits and does not use the merge message. If conflicts occur,
+resolve and review them before committing. Do not merge unrelated kind
+experiments into main simply to clear GitHub's ahead/behind counter.
 
-## Why synchronize main after the feature reached both branches?
+## Testing a workflow without code changes
 
-If both branches contain the exact same feature change, step 5 is not needed to
-add that feature again. It is a synchronization step for the branches as a whole.
+In Actions, select the desired service's **Release ... service to kind** workflow
+and manually run it on `kind`. For AWS, select the AWS workflow and `main`.
+Creating or synchronizing a branch does not guarantee an image release: the
+workflows use path filters.
 
-For example, both branches may already contain your Product Catalog change.
-Meanwhile, a separate PR adds a Recommendation fix to `main`. Merging
-`origin/main` into `kind` brings that Recommendation fix into the local test
-environment. The next feature is then tested alongside the reviewed fix.
-
-The two merges can also have different results: review may amend a feature
-before it reaches `main`, or its main merge may resolve a conflict differently.
-Synchronizing brings those reviewed results into `kind` too. Review any conflicts
-against both the intended feature and existing kind-only experiments.
-
-Separate merges create different merge commits even when the resulting files
-are identical. A squash merge also gives main a different commit identity.
-GitHub's ahead/behind counts describe commit ancestry, not just code differences.
-A merge from main can record shared history without changing application files.
-Do not merge kind experiments into main merely to clear an ahead counter.
-
-If main contains only a different merge commit and the application files already
-match, synchronization is useful for history but does not add new functionality.
-If main is already an ancestor of kind, `git merge origin/main` reports
-`Already up to date`. There is no need to manufacture another merge.
-
-## Release boundaries
-
-A service-only change normally releases only that service. Shared files such as
-`scripts/promote.py` can trigger multiple service workflows. A main-to-kind
-merge may run CI without starting a release if no release path-filtered files
-changed. For a no-code release test, manually dispatch the relevant kind workflow
-with branch `kind` selected rather than creating a dummy change.
-
-The two targets currently build images independently. Testing a kind image does
-not promote that exact image digest to AWS; AWS builds and verifies its own image
-from the main commit. Compare release SHA tags and, for exact content, image
-digests against the running pods.
+Kind and AWS build images separately. Compare each release's SHA tag and image
+digest with the running pod; they are not the same image promoted between registries.
