@@ -1,47 +1,42 @@
 # otel-demo-apps
 
-Shared application source, Dockerfiles, regression tests, and image-release
-workflows for the OpenTelemetry Demo. Infrastructure and deployment desired
-state live in separate repositories.
+Application source, Dockerfiles, tests, and release workflows for the
+[OpenTelemetry Demo](https://opentelemetry.io/docs/demo/).
 
-| Responsibility | AWS | kind |
+The custom services are **Ad**, **Product Catalog**, and **Recommendation**.
+Other demo services come from the pinned upstream Helm chart.
+
+## Release targets
+
+| Source branch | Image registry | Deployment configuration |
 | --- | --- | --- |
-| Infrastructure | [otel-demo-infra-aws](https://github.com/lackito/otel-demo-infra-aws) | [otel-demo-infra-kind](https://github.com/lackito/otel-demo-infra-kind) |
-| Deployment desired state | [otel-demo-gitops-aws](https://github.com/lackito/otel-demo-gitops-aws) | [otel-demo-gitops-kind](https://github.com/lackito/otel-demo-gitops-kind) |
-| Application source branch | `main` | `kind` |
-| Images | Amazon ECR, full Git SHA tags | Public GHCR `otel-demo-kind-<service>`, full Git SHA tags |
-| Argo CD Application | `otel-demo-aws` | `otel-demo-kind` |
+| `kind` | Public GHCR packages, `otel-demo-kind-<service>` | [otel-demo-gitops-kind](https://github.com/lackito/otel-demo-gitops-kind) |
+| `main` | Amazon ECR repositories named after each service | [otel-demo-gitops-aws](https://github.com/lackito/otel-demo-gitops-aws) |
 
-Recommendation, Product Catalog, and Ad each have their own
-`<service>-aws-release.yml` and `<service>-kind-release.yml` workflows. A service
-source change releases that service; changing the shared promotion script can
-release all three. CI builds and tests both native ARM64 and AMD64 images.
+Each service has its own AWS and kind release workflow. A service-only change
+releases that service; changes to shared release files can trigger several.
+Workflows build and test images, publish them, and update GitOps. Argo CD then
+updates the cluster.
 
-## Release configuration
+## GitHub Actions settings
 
-| Setting in this repository | Purpose |
+Configure these in this repository:
+
+| Setting | Purpose |
 | --- | --- |
-| `AWS_GITOPS_REPOSITORY_TOKEN` secret | Contents read/write for `lackito/otel-demo-gitops-aws` |
-| `KIND_GITOPS_REPOSITORY_TOKEN` secret | Contents read/write for `lackito/otel-demo-gitops-kind` |
-| `GITHUB_TOKEN` (automatic) | GHCR publication with workflow `packages: write`; no registry PAT secret required |
-| `AWS_RELEASES_ENABLED` Actions variable | Set to `true` after AWS infrastructure and publisher roles are rebuilt; AWS release jobs otherwise skip |
+| `KIND_GITOPS_REPOSITORY_TOKEN` secret | Contents read/write for `otel-demo-gitops-kind` |
+| `AWS_GITOPS_REPOSITORY_TOKEN` secret | Contents read/write for `otel-demo-gitops-aws` |
+| `AWS_RELEASES_ENABLED` variable | Set to `true` only when AWS infrastructure is ready |
 
-AWS releases use main-only GitHub OIDC and repository-scoped ECR publisher roles.
-The trusted application identity remains
-`repo:lackito@6595109/otel-demo-apps@1305341394:ref:refs/heads/main`.
-Kind releases run on native ARM64, verify anonymous package access, and update
-kind GitOps. Make each new GHCR package public before rerunning its first
-publication if the anonymous-access check fails.
+GHCR publishing uses the automatic `GITHUB_TOKEN` with `packages: write`.
+There is no registry PAT or infrastructure-repository token to configure.
+AWS publishing uses GitHub OIDC and the Terraform-managed IAM role for each
+service. Kind packages must be public for anonymous cluster pulls.
 
-Both release paths test real requests, health, and OTLP signals before GitOps
-promotion. `scripts/promote.py --target aws|kind` changes only the selected
-service and retries competing ordinary pushes against GitOps main. Argo CD
-reconciles the resulting commit. CI does not deploy directly to Kubernetes.
+## Guides
 
-## Build, verify, and migrate
+- [Branching](docs/BRANCHING.md): develop, test on kind, and review into main.
+- [Build and release](DELIVERY.md): commands for all three services and verification.
+- [Names and repositories](docs/NAMING.md): a short reference for both environments.
 
-- [Branching strategy](docs/BRANCHING.md): develop on feature branches, validate on kind, review into main, and synchronize main changes back into kind when needed.
-
-- [DELIVERY.md](DELIVERY.md): pinned-chart compatibility, builds, regression tests, promotion, verification, and rollback.
-- [Naming migration](docs/NAMING.md): repository rename order, secret names, kind branch bootstrap, and resource identities.
-- [Architecture walkthrough](https://github.com/lackito/otel-demo-infra-kind/blob/main/docs/ARCHITECTURE.md): shared delivery model and ownership boundaries.
+Each service directory has its own README for service-specific details.
