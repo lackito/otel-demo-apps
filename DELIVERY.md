@@ -69,8 +69,7 @@ without changing the deployed application. Inspect the failed step before rerunn
 
 1. Confirm the service's release job succeeded.
 2. Check its generated `chore(<service>): deploy <sha>` commit in the target GitOps repo.
-3. Run `make application-validate` from kind infrastructure, or
-   `aws-vault exec admin -- make application-validate` from AWS infrastructure.
+3. Run `make application-validate` from the target environment's infrastructure repository.
 4. Compare the deployed tag with the release SHA and the running image digest
    with the published platform image. A tagged image index can have a different
    digest from the platform image it references.
