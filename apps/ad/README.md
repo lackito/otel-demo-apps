@@ -1,71 +1,26 @@
-# Ad Service
+# Ad service
 
-The Ad service provides advertisement based on context keys. If no context keys
-are provided then it returns random ads.
+Returns contextual ads for supplied keys, or random ads when no keys are given.
+It exposes gRPC on `AD_PORT` and uses the pinned Java agent for instrumentation.
 
-## Building Locally
+## Build and test
 
-The Ad service requires at least JDK 21 to build and uses gradlew to
-compile/install/distribute. Gradle wrapper is already part of the source code.
-To build Ad Service, run:
+From the repository root, with the test environment in [DELIVERY.md](../../DELIVERY.md):
 
-```sh
-./gradlew installDist
+```bash
+docker build -f apps/ad/Dockerfile -t ad:test .
+python scripts/smoke.py ad ad:test
 ```
 
-It will create an executable script
-`src/ad/build/install/oteldemo/bin/Ad`.
+The Docker build uses the repository-root `pb/` protocol input. The smoke test
+checks targeted/random ad responses, gRPC health, and OTLP traces, metrics, and logs.
 
-To run the Ad Service:
+## Metrics
 
-```sh
-export AD_PORT=8080
-export FEATURE_FLAG_GRPC_SERVICE_ADDR=featureflagservice:50053
-./build/install/opentelemetry-demo-ad/bin/Ad
-```
+The service emits OpenTelemetry custom metrics over OTLP. It also exposes
+Prometheus-client metrics on `AD_PROMETHEUS_PORT` (default 9465). The Collector
+can scrape that endpoint into its metrics pipeline. These are two instrumentation
+paths within this service.
 
-### Upgrading Gradle
-
-If you need to upgrade the version of gradle then run
-
-```sh
-./gradlew wrapper --gradle-version <new-version>
-```
-
-## Building Docker
-
-From the root of `otel-demo-apps`, run:
-
-```sh
-docker build --file ./apps/ad/Dockerfile ./
-```
-
-## Custom metrics: bridging Prometheus to OpenTelemetry
-
-The Ad service intentionally emits custom metrics in **two different ways**:
-
-1. **OpenTelemetry SDK** (recommended): `adRequestsCounter`
-   (`demo.ad.requests`) is created via `GlobalOpenTelemetry.getMeter(...)`
-   and exported to the OTel Collector over OTLP.
-2. **Prometheus client library**: `adsServedCounter`
-   (`demo_ad_served_total{category}`) is created with the
-   `io.prometheus:prometheus-metrics-core` library and exposed on a separate
-   HTTP endpoint (`AD_PROMETHEUS_PORT`, default `9465`). The OTel Collector's
-   `prometheus/ad` receiver scrapes this endpoint and forwards the metric
-   into the same metrics pipeline.
-
-The Prometheus-client path is included to demonstrate a **common pattern
-during OpenTelemetry adoption**: organizations frequently already own a
-significant amount of Prometheus instrumentation (in libraries, third-party
-exporters, or legacy services) and want to ingest those metrics into an
-OpenTelemetry-native pipeline without rewriting everything up front. The
-Collector's `prometheus` receiver is the bridge that makes this possible.
-
-**Recommendation**: this is a *transitional* pattern. Prefer the
-OpenTelemetry SDK for new custom metrics, and migrate existing
-Prometheus-client metrics to it - incremental migration as you touch
-the surrounding code has proven successful in practice, but a focused
-refactor works too; what matters is that the migration happens.
-
-See [delivery instructions](../../DELIVERY.md) for repository-root builds,
-chart 0.38.4 configuration, smoke tests, and release prerequisites.
+Use the service's kind or AWS release workflow to publish and promote its image.
+See [branching](../../docs/BRANCHING.md) and [delivery](../../DELIVERY.md).
