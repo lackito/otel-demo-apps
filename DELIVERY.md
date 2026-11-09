@@ -95,3 +95,4 @@ an override restores that service's pinned upstream chart image.
 - [Product Catalog](apps/product-catalog/README.md): JSON products and safe reloads.
 - [Recommendation](apps/recommendation/README.md): catalog-backed recommendations and flagd compatibility.
 - [Protocol provenance](pb/README.md): upstream sources and licenses.
+
