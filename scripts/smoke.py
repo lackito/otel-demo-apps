@@ -116,3 +116,5 @@ def main(service, image):
 
 if __name__ == '__main__':
     main(*sys.argv[1:])
+    if sys.argv[1] == 'ad':
+        subprocess.run([sys.executable, str(ROOT / 'apps/ad/test_flagd.py'), sys.argv[2]], check=True)
