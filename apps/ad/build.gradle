@@ -55,9 +55,9 @@ dependencies {
                 "io.opentelemetry:opentelemetry-sdk",
                 "io.opentelemetry.instrumentation:opentelemetry-instrumentation-annotations",
                 "org.apache.logging.log4j:log4j-core:2.26.1",
-                // Chart 0.38.4 runs flagd v0.12.8 (evaluation v1).
-                "dev.openfeature.contrib.providers:flagd:0.11.20",
-                'dev.openfeature:sdk:1.21.0',
+                // Chart 0.42.6 runs flagd v0.16.0.
+                "dev.openfeature.contrib.providers:flagd:0.14.1",
+                'dev.openfeature:sdk:1.22.1',
                 "io.prometheus:prometheus-metrics-core:${prometheusMetricsVersion}",
                 "io.prometheus:prometheus-metrics-exporter-httpserver:${prometheusMetricsVersion}"
 

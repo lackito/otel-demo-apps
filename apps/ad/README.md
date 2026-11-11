@@ -16,10 +16,10 @@ The Docker build uses the repository-root `pb/` protocol input. The smoke test
 checks targeted/random ad responses, gRPC health, and OTLP traces, metrics, and logs.
 
 For Ad, the smoke test also runs `apps/ad/test_flagd.py` with the same image.
-This starts a separate flagd v0.12.8 container (the
-server used by chart 0.38.4) and switches `adHighCpu` from false to true.
+This starts a separate flagd v0.16.0 container (the
+server used by chart 0.42.6) and switches `adHighCpu` from false to true.
 It verifies that Ad acts on the flag instead of silently using its false
-fallback. Keep the Java provider compatible with the server's v1 evaluation API.
+fallback.
 
 ## Metrics
 
