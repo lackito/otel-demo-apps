@@ -1,4 +1,4 @@
-"""Run against a built Ad image and the real flagd version in chart 0.38.4."""
+"""Run against a built Ad image and the real flagd version in chart 0.42.6."""
 import json
 import subprocess
 import sys
@@ -37,7 +37,7 @@ def check(image):
         try:
             # Ad shares this isolated network namespace: localhost:8013 is flagd.
             docker("run", "-d", "--name", flagd, "-p", "127.0.0.1::8080",
-                   "-v", f"{directory}:/flags:ro", "ghcr.io/open-feature/flagd:v0.12.8",
+                   "-v", f"{directory}:/flags:ro", "ghcr.io/open-feature/flagd:v0.16.0",
                    "start", "--uri", "file:/flags/flags.json")
             docker("run", "-d", "--name", ad, "--network", "container:" + flagd,
                    "--cpus=1", "-e", "AD_PORT=8080", "-e", "FLAGD_HOST=localhost",
@@ -54,7 +54,7 @@ def check(image):
                 while time.monotonic() < deadline:
                     get_ads(b"", timeout=10)
                     if enabled_message in docker("logs", ad):
-                        print("Ad observed adHighCpu change from off to on via flagd v0.12.8.")
+                        print("Ad observed adHighCpu change from off to on via flagd v0.16.0.")
                         return
                     time.sleep(0.5)
                 raise AssertionError("Ad never acted on adHighCpu=true; check the flagd RPC version")
