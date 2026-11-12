@@ -20,7 +20,7 @@ docker build -f apps/ad/Dockerfile -t ad:test .
 docker build -f apps/product-catalog/Dockerfile -t catalog:test .
 docker build -t recommendation:test apps/recommendation
 python scripts/smoke.py ad ad:test
-python scripts/smoke.py product-catalog catalog:test
+python apps/product-catalog/smoke.py catalog:test
 python apps/recommendation/smoke.py recommendation:test
 ```
 
@@ -92,7 +92,7 @@ an override restores that service's pinned upstream chart image.
 ## Service details
 
 - [Ad](apps/ad/README.md): contextual ads, Java agent, and custom metrics.
-- [Product Catalog](apps/product-catalog/README.md): JSON products and safe reloads.
+- [Product Catalog](apps/product-catalog/README.md): PostgreSQL-backed products and live queries.
 - [Recommendation](apps/recommendation/README.md): catalog-backed recommendations and flagd compatibility.
 - [Protocol provenance](pb/README.md): upstream sources and licenses.
 

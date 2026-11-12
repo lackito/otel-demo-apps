@@ -64,7 +64,7 @@ jobs:
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             -t "$IMAGE_URI" .
-          python scripts/smoke.py product-catalog "$IMAGE_URI"
+          python apps/product-catalog/smoke.py "$IMAGE_URI"
       - name: Publish image
         env:
           IMAGE_URI: ${{ steps.image.outputs.uri }}
@@ -80,7 +80,7 @@ jobs:
             echo "Make the GHCR package public, then rerun this kind-branch workflow." >&2
             exit 1
           }
-          python scripts/smoke.py product-catalog "$IMAGE_URI"
+          python apps/product-catalog/smoke.py "$IMAGE_URI"
           docker image inspect "$IMAGE_URI" --format '{{json .RepoDigests}}' >> "$GITHUB_STEP_SUMMARY"
       - name: Check out kind GitOps
         uses: actions/checkout@v6
