@@ -91,7 +91,7 @@ jobs:
           fi
           docker pull "${image_uri}"
           python -m pip install --only-binary=:all: grpcio==1.78.0 grpcio-tools==1.78.0
-          python scripts/smoke.py product-catalog "${image_uri}"
+          python apps/product-catalog/smoke.py "${image_uri}"
           echo "tag=${image_tag}" >> "$GITHUB_OUTPUT"
           echo "uri=${image_uri}" >> "$GITHUB_OUTPUT"
 
