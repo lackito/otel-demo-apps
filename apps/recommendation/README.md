@@ -1,7 +1,7 @@
 # Recommendation service
 
 Returns recommendations from Product Catalog, excluding the requested product
-IDs. Uses flagd's v1 evaluation API to match Helm chart 0.38.4.
+IDs. Uses the Python flagd provider from upstream 3.1.0 with chart 0.42.6.
 
 ## Build and test
 
@@ -13,14 +13,14 @@ python apps/recommendation/smoke.py recommendation:test
 ```
 
 The test uses a disposable container with the chart's 500 MiB memory budget,
-a mock catalog, a flagd-v1 service, and OTLP receivers. It checks concurrent
+a mock catalog, flagd v0.16.0, and OTLP receivers. It checks concurrent
 requests, excluded products, health, flag evaluation, and all three telemetry
 signals. It runs for 120 seconds; add `--seconds 300` for a longer check.
 
 ## Runtime requirements
 
 Keep dependency hashes in `requirements.txt` in sync with `requirements.in`.
-The flagd provider must support v1. Automatic OpenTelemetry instrumentation owns
+Automatic OpenTelemetry instrumentation owns
 the log provider and handler; application code uses the standard logger.
 `PYTHONFAULTHANDLER=1` enables Python stack diagnostics for native failures.
 

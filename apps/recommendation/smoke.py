@@ -26,7 +26,7 @@ def command(*args):
 
 
 def main(image, seconds):
-    with tempfile.TemporaryDirectory() as generated:
+    with tempfile.TemporaryDirectory(dir=ROOT) as generated:
         proto = ROOT / "pb/demo.proto"
         if protoc.main(["protoc", f"-I{proto.parent}", f"--python_out={generated}",
                         f"--grpc_python_out={generated}", str(proto)]) != 0:
@@ -36,9 +36,7 @@ def main(image, seconds):
         import demo_pb2_grpc as rpc
 
         received = set()
-        flag_calls = 0
         lock = threading.Lock()
-        stop = threading.Event()
         backend = grpc.server(futures.ThreadPoolExecutor(max_workers=12))
         ids = {f"product-{n}" for n in range(8)}
 
@@ -48,23 +46,6 @@ def main(image, seconds):
                     products=[pb.Product(id=value, name=value) for value in sorted(ids)])
 
         rpc.add_ProductCatalogServiceServicer_to_server(Catalog(), backend)
-        # Minimal flagd v1 wire fixtures: ready event and false/DYNAMIC response.
-        # DYNAMIC deliberately exercises the RPC on every request (no static cache).
-        def events(request, context):
-            yield b"\x0a\x0eprovider_ready"
-            while context.is_active() and not stop.wait(.1):
-                pass
-        def resolve_flag(request, context):
-            nonlocal flag_calls
-            with lock:
-                flag_calls += 1
-            return b"\x12\x07DYNAMIC"
-        backend.add_generic_rpc_handlers((grpc.method_handlers_generic_handler(
-            "flagd.evaluation.v1.Service", {
-                "ResolveBoolean": grpc.unary_unary_rpc_method_handler(
-                    resolve_flag),
-                "EventStream": grpc.unary_stream_rpc_method_handler(events),
-            }),))
         for signal, api in (("traces", "trace"), ("metrics", "metrics"), ("logs", "logs")):
             def export(payload, context, signal=signal):
                 if b"recommendation" in payload:
@@ -77,13 +58,30 @@ def main(image, seconds):
         port = backend.add_insecure_port("0.0.0.0:0")
         backend.start()
         name = "recommendation-smoke-" + uuid.uuid4().hex[:12]
+        flagd = name + "-flagd"
+        flags_dir = Path(generated) / "flags"
+        flags_dir.mkdir()
+        flags_dir.chmod(0o755)
+
+        def set_cache_flag(enabled):
+            flag = {"state": "ENABLED", "variants": {"on": True, "off": False},
+                    "defaultVariant": "on" if enabled else "off"}
+            pending = flags_dir / "pending"
+            pending.write_text(json.dumps({"flags": {"recommendationCacheFailure": flag}}))
+            pending.replace(flags_dir / "flags.json")
+
         channel = None
         try:
+            set_cache_flag(False)
+            command("docker", "network", "create", name)
+            command("docker", "run", "-d", "--network", name, "--name", flagd,
+                    "-v", f"{flags_dir}:/flags:ro", "ghcr.io/open-feature/flagd:v0.16.0",
+                    "start", "--uri", "file:/flags/flags.json")
             env = {
                 "RECOMMENDATION_PORT": "8080",
                 "PRODUCT_CATALOG_ADDR": f"host.docker.internal:{port}",
-                "FLAGD_HOST": "host.docker.internal",
-                "FLAGD_PORT": str(port),
+                "FLAGD_HOST": flagd,
+                "FLAGD_PORT": "8013",
                 "OTEL_SERVICE_NAME": "recommendation",
                 "OTEL_EXPORTER_OTLP_ENDPOINT": f"http://host.docker.internal:{port}",
                 "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
@@ -94,7 +92,7 @@ def main(image, seconds):
                 "OTEL_BSP_SCHEDULE_DELAY": "100",
                 "OTEL_BLRP_SCHEDULE_DELAY": "100",
             }
-            args = ["docker", "run", "-d", "--name", name, "--memory=500m",
+            args = ["docker", "run", "-d", "--name", name, "--memory=500m", "--network", name,
                     "--add-host", "host.docker.internal:host-gateway",
                     "-p", "127.0.0.1::8080"]
             for key, value in env.items():
@@ -124,7 +122,16 @@ def main(image, seconds):
             assert health(b"", timeout=5) == b"\x08\x01"
             with lock:
                 assert received == {"traces", "metrics", "logs"}, received
-                assert flag_calls >= count, f"flagd v1 evaluations missing: {flag_calls}/{count}"
+            set_cache_flag(True)
+            for _ in range(30):
+                stub.ListRecommendations(pb.ListRecommendationsRequest(), timeout=10)
+                recent = subprocess.run(["docker", "logs", "--tail", "40", name],
+                                        capture_output=True, text=True, check=True)
+                if "get_product_list: cache miss" in recent.stdout + recent.stderr:
+                    break
+                time.sleep(0.5)
+            else:
+                raise AssertionError("Recommendation did not observe the flag change")
             state = json.loads(command("docker", "inspect", "--format", "{{json .State}}", name))
             assert state["Running"] and not state["OOMKilled"], state
             logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True, check=True)
@@ -135,7 +142,8 @@ def main(image, seconds):
                 channel.close()
             subprocess.run(["docker", "logs", "--tail", "15", name], check=False)
             subprocess.run(["docker", "rm", "-f", name], check=False, stdout=subprocess.DEVNULL)
-            stop.set()
+            subprocess.run(["docker", "rm", "-f", flagd], check=False, stdout=subprocess.DEVNULL)
+            subprocess.run(["docker", "network", "rm", name], check=False, stdout=subprocess.DEVNULL)
             backend.stop(0).wait()
 
 
